@@ -1,41 +1,105 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ================================
+# Dependencies
+# ================================
+node_modules/
+.pnpm-store/
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# ================================
+# Build Output
+# ================================
+.output/
+/build/
+dist/
 
-# testing
-/coverage
+# SvelteKit
+.svelte-kit/
 
-# next.js
-/.next/
-/out/
+# ================================
+# Deployment Platforms
+# ================================
+.vercel/
+.netlify/
+.wrangler/
 
-# production
-/build
+# ================================
+# Supabase
+# ================================
+# Local Supabase
+supabase/.branches/
+supabase/.temp/
 
-# misc
+# ================================
+# Environment Variables
+# ================================
+.env
+.env.*
+!.env.example
+!.env.test
+
+# ================================
+# IDE & Editors
+# ================================
+# VSCode (keep shared settings, ignore personal)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# JetBrains
+.idea/
+*.iml
+
+# Vim
+*.swp
+*.swo
+*~
+
+# ================================
+# OS Generated
+# ================================
 .DS_Store
-*.pem
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# debug
+# ================================
+# Logs & Debug
+# ================================
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-*.json
-# vercel
-.vercel
+# ================================
+# Testing & Coverage
+# ================================
+coverage/
+.nyc_output/
+*.lcov
 
-# typescript
+# ================================
+# Vite
+# ================================
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# ================================
+# Flutter (for future mobile apps)
+# ================================
+# Miscellaneous
+flutter/.dart_tool/
+flutter/.packages
+flutter/build/
+flutter/.flutter-plugins
+flutter/.flutter-plugins-dependencies
+flutter/*.iml
+flutter/.metadata
+flutter/pubspec.lock
+
+# ================================
+# Misc
+# ================================
+*.local
 *.tsbuildinfo
-next-env.d.ts
