@@ -1,15 +1,15 @@
 /**
- * TTS API 路由 - 使用 MiniMax T2A 生成音频
- * PRD 12.1 参考: https://api.minimaxi.com/v1/t2a_v2
+ * TTS API 路由 - 使用真人发音（frdic.com）
+ * 替换 MiniMax T2A，使用有道词典真人发音接口
  */
 
 import { json } from '@sveltejs/kit';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { MINIMAX_API_KEY, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL } from '$env/static/private';
+import { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL } from '$env/static/private';
 import type { RequestHandler } from './$types';
 
-// MiniMax T2A API 端点
-const MINIMAX_T2A_URL = 'https://api.minimaxi.com/v1/t2a_v2';
+// frdic.com 真人发音 API（美音）
+const FRDIC_TTS_URL = 'https://api.frdic.com/api/v2/speech/speakweb';
 
 // R2 S3 客户端配置
 function getR2Client(): S3Client {
@@ -24,16 +24,12 @@ function getR2Client(): S3Client {
 }
 
 /**
- * 将 hex 字符串转换为 Uint8Array
+ * 将文本编码为 frdic 格式的 Base64
+ * 格式：QYN + Base64(text)
  */
-function hexToUint8Array(hex: string): Uint8Array {
-    // 移除可能的 "0x" 前缀
-    const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-    const bytes = new Uint8Array(cleanHex.length / 2);
-    for (let i = 0; i < cleanHex.length; i += 2) {
-        bytes[i / 2] = parseInt(cleanHex.substring(i, i + 2), 16);
-    }
-    return bytes;
+function encodeWordToFrdic(text: string): string {
+    const base64 = Buffer.from(text).toString('base64');
+    return `QYN${base64}`;
 }
 
 /**
@@ -54,61 +50,46 @@ async function uploadToR2(audioData: Uint8Array, filename: string): Promise<stri
 }
 
 /**
- * 调用 MiniMax T2A API 生成音频
+ * 从 frdic.com 获取真人发音音频
  */
-async function generateAudioWithMiniMax(text: string): Promise<{ audioUrl: string; audioSize: number }> {
-    const response = await fetch(MINIMAX_T2A_URL, {
-        method: 'POST',
+async function fetchAudioFromFrdic(word: string): Promise<Uint8Array> {
+    // 编码单词
+    const encodedWord = encodeWordToFrdic(word);
+    const url = `${FRDIC_TTS_URL}?langid=en&voicename=en_us_female&txt=${encodedWord}`;
+
+    console.log(`[TTS] Fetching audio from frdic: ${url}`);
+
+    const response = await fetch(url, {
         headers: {
-            'Authorization': `Bearer ${MINIMAX_API_KEY}`,
-            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'audio/mpeg,audio/*,*/*',
+            'Referer': 'https://www.frdic.com/',
         },
-        body: JSON.stringify({
-            model: 'speech-2.6-hd',
-            text: text,
-            stream: false,
-            voice_setting: {
-                voice_id: 'male-qn-qingse',
-                speed: 1,
-                vol: 1,
-                pitch: 0,
-                emotion: 'neutral',
-            },
-            audio_setting: {
-                sample_rate: 32000,
-                bitrate: 128000,
-                format: 'mp3',
-                channel: 1,
-            },
-            subtitle_enable: false,
-        }),
     });
 
     if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`MiniMax API error: ${response.status} - ${error}`);
+        throw new Error(`frdic API error: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const arrayBuffer = await response.arrayBuffer();
+    const audioData = new Uint8Array(arrayBuffer);
 
-    console.log('[TTS] MiniMax response status:', data.base_resp?.status_code);
-    console.log('[TTS] Audio hex length:', data.data?.audio?.length);
-
-    if (data.base_resp?.status_code !== 0) {
-        throw new Error(`MiniMax API error: ${data.base_resp?.status_msg || 'unknown error'}`);
+    if (audioData.length === 0) {
+        throw new Error('Empty audio data received');
     }
 
-    // 解码 hex 音频数据
-    const audioHex = data.data?.audio;
-    if (!audioHex) {
-        throw new Error('No audio data in response');
-    }
+    console.log(`[TTS] Audio data size: ${audioData.length} bytes`);
+    return audioData;
+}
 
-    console.log('[TTS] Converting hex to audio data...');
-    const audioData = hexToUint8Array(audioHex);
-    console.log('[TTS] Audio data size:', audioData.length, 'bytes');
+/**
+ * 调用 frdic 真人发音 API
+ */
+async function generateAudioWithFrdic(text: string): Promise<{ audioUrl: string; audioSize: number }> {
+    // 从 frdic 获取音频
+    const audioData = await fetchAudioFromFrdic(text);
 
-    // 生成文件名（使用单词 + 时间戳）
+    // 生成文件名
     const filename = `${text.toLowerCase()}_${Date.now()}.mp3`;
 
     // 上传到 R2
@@ -116,7 +97,7 @@ async function generateAudioWithMiniMax(text: string): Promise<{ audioUrl: strin
 
     return {
         audioUrl,
-        audioSize: data.extra_info?.audio_size || audioData.length,
+        audioSize: audioData.length,
     };
 }
 
@@ -132,7 +113,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
         console.log(`[TTS] Generating audio for word: ${word}`);
 
-        const result = await generateAudioWithMiniMax(word);
+        const result = await generateAudioWithFrdic(word);
 
         console.log(`[TTS] Audio generated successfully: ${result.audioUrl}`);
 
