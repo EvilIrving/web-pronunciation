@@ -27,3 +27,15 @@
   - 新增 `editGeneratingAudio` 状态
   - 新增 `generateAudioForEdit()` 函数
   - 编辑模式添加"🎵"按钮生成音频
+
+### task005 - 后台交互优化：音频重生成按钮独立
+- **Modify**: `web/src/routes/admin/+page.svelte`:
+  - 新增 `regeneratingAudioId` 状态（按行跟踪加载状态）
+  - 新增 `regenerateAudio()` 函数 - 一键生成音频并自动保存更新列表
+  - 操作列新增 "🔊" 按钮（浏览模式可见）- 点击直接生成音频，无需进入编辑
+  - 移除编辑模式中的音频生成按钮 - 编辑仅支持修改单词和音标
+  - 编辑表单移除 `audio_url` 字段
+- **Behavior**:
+  - 重新生成音频和删除为高频操作，可快速执行
+  - 编辑为低频操作，需点击"编辑"按钮进入
+  - 符合用户期望的交互优先级

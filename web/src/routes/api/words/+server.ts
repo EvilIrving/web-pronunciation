@@ -21,24 +21,39 @@ interface WordInsert {
 
 interface WordUpdate extends Partial<WordInsert> {}
 
-// GET - 获取单词列表
+// GET - 获取单词列表（支持分页和搜索）
 export const GET: RequestHandler = async ({ url }) => {
   try {
     const search = url.searchParams.get('search') || '';
+    const limit = parseInt(url.searchParams.get('limit') || '20');
+    const offset = parseInt(url.searchParams.get('offset') || '0');
 
-    let query = supabase.from('words').select('*').order('created_at', { ascending: false });
+    // 构建查询 - 使用 count: 'exact' 获取总数
+    let query = supabase
+      .from('words')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false });
 
     if (search) {
       query = query.or(`word.ilike.%${search}%,normalized.ilike.%${search}%`);
     }
 
-    const { data, error } = await query;
+    // 应用分页
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
 
     if (error) {
       return json({ error: error.message }, { status: 400 });
     }
 
-    return json({ data: data || [] });
+    return json({
+      data: data || [],
+      total: count || 0,
+      limit,
+      offset,
+      hasMore: (offset + limit) < (count || 0)
+    });
   } catch (e) {
     console.error('GET /api/words error:', e);
     return json({ error: 'Internal server error' }, { status: 500 });

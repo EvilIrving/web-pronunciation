@@ -24,13 +24,14 @@
 
   // 行内编辑状态
   let editingId = $state<string | null>(null);
-  let editForm = $state<{ word: string; ipa: string; audio_url: string }>({
+  let editForm = $state<{ word: string; ipa: string }>({
     word: '',
     ipa: '',
-    audio_url: '',
   });
   let editSaving = $state(false);
-  let editGeneratingAudio = $state(false);
+
+  // 音频重新生成状态（按行跟踪）
+  let regeneratingAudioId = $state<string | null>(null);
 
   // 音频播放
   let playingId = $state<string | null>(null);
@@ -184,14 +185,13 @@
     editForm = {
       word: word.word,
       ipa: word.ipa || '',
-      audio_url: word.audio_url || '',
     };
   }
 
   // 取消编辑
   function cancelEdit() {
     editingId = null;
-    editForm = { word: '', ipa: '', audio_url: '' };
+    editForm = { word: '', ipa: '' };
   }
 
   // 保存编辑
@@ -202,7 +202,7 @@
       const response = await fetch('/api/words', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, ...editForm }),
+        body: JSON.stringify({ id, word: editForm.word, ipa: editForm.ipa }),
       });
 
       const result = await response.json();
@@ -220,27 +220,37 @@
     }
   }
 
-  // 为编辑中的单词生成音频
-  async function generateAudioForEdit() {
-    const word = editForm.word.trim();
-    if (!word) {
-      alert('请先输入单词');
-      return;
-    }
-
-    editGeneratingAudio = true;
+  // 一键重新生成音频
+  async function regenerateAudio(word: Word) {
+    regeneratingAudioId = word.id;
 
     try {
-      const audioUrl = await fetchTTS(word);
-      if (audioUrl) {
-        editForm.audio_url = audioUrl;
-      } else {
+      const audioUrl = await fetchTTS(word.word);
+
+      if (!audioUrl) {
         alert('生成音频失败');
+        return;
       }
+
+      // 更新数据库中的音频URL
+      const response = await fetch('/api/words', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: word.id, audio_url: audioUrl }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '更新音频失败');
+      }
+
+      // 刷新列表
+      await loadWords();
     } catch (e) {
-      alert(e instanceof Error ? e.message : '生成音频失败');
+      alert(e instanceof Error ? e.message : '重新生成音频失败');
     } finally {
-      editGeneratingAudio = false;
+      regeneratingAudioId = null;
     }
   }
 
@@ -538,14 +548,7 @@
                 <!-- 操作列 -->
                 <td class="whitespace-nowrap px-4 py-3 text-right text-sm">
                   {#if editingId === word.id}
-                    <button
-                      onclick={generateAudioForEdit}
-                      disabled={editGeneratingAudio}
-                      class="mr-2 text-purple-600 hover:text-purple-800 disabled:opacity-50"
-                      title="生成音频"
-                    >
-                      {editGeneratingAudio ? '生成中...' : '🎵'}
-                    </button>
+                    <!-- 编辑模式：仅保存和取消 -->
                     <button
                       onclick={() => saveEdit(word.id)}
                       disabled={editSaving}
@@ -561,6 +564,15 @@
                       取消
                     </button>
                   {:else}
+                    <!-- 浏览模式：显示重新生成音频按钮（高频操作） -->
+                    <button
+                      onclick={() => regenerateAudio(word)}
+                      disabled={regeneratingAudioId === word.id}
+                      class="mr-2 text-purple-600 hover:text-purple-800 disabled:opacity-50"
+                      title="重新生成音频"
+                    >
+                      {regeneratingAudioId === word.id ? '生成中...' : '🔊'}
+                    </button>
                     <button
                       onclick={() => startEdit(word)}
                       class="mr-2 text-blue-600 hover:text-blue-800"
