@@ -1,8 +1,6 @@
 /**
  * Dictionary API 服务
  * 调用服务端 API 获取发音信息
- * - IPA 音标：Moonshot AI（KIMI）
- * - 音频：MiniMax T2A + R2 存储
  */
 
 // 发音信息结果
@@ -12,77 +10,17 @@ export interface PronunciationInfo {
 }
 
 /**
- * 获取 IPA 音标（通过 Moonshot AI）
- * @param word 要查询的单词
- * @returns IPA 音标
- */
-export async function fetchIPA(word: string): Promise<string | null> {
-    try {
-        const response = await fetch('/api/ipa', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ word }),
-        });
-
-        if (!response.ok) {
-            console.warn(`IPA API: 获取单词 "${word}" 音标失败`);
-            return null;
-        }
-
-        const data = await response.json();
-        return data.ipa_us || null;
-    } catch (error) {
-        console.error(`获取单词 "${word}" 音标时出错:`, error);
-        return null;
-    }
-}
-
-/**
- * 生成音频（通过 MiniMax T2A + R2）
- * @param word 要生成音频的单词
- * @returns 音频 URL
- */
-export async function generateAudio(word: string): Promise<string | null> {
-    try {
-        const response = await fetch('/api/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ word }),
-        });
-
-        if (!response.ok) {
-            console.warn(`TTS API: 生成单词 "${word}" 音频失败`);
-            return null;
-        }
-
-        const data = await response.json();
-        return data.audio_url_us || null;
-    } catch (error) {
-        console.error(`生成单词 "${word}" 音频时出错:`, error);
-        return null;
-    }
-}
-
-/**
  * 获取单词的发音信息（IPA 音标 + 音频）
  * @param word 要查询的单词
  * @returns 发音信息，包含音标和音频 URL
  */
-export async function fetchPronunciation(word: string): Promise<PronunciationInfo> {
+export async function fetchPronunciation(_word: string): Promise<PronunciationInfo> {
     const result: PronunciationInfo = {
         ipa_us: null,
         audio_url_us: null,
     };
 
-    // 并行获取 IPA 和音频
-    const [ipa_us, audio_url_us] = await Promise.all([
-        fetchIPA(word),
-        generateAudio(word),
-    ]);
-
-    result.ipa_us = ipa_us;
-    result.audio_url_us = audio_url_us;
-
+    // TODO: 从词典 API 获取
     return result;
 }
 

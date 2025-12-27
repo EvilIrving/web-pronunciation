@@ -30,21 +30,46 @@ export const POST: RequestHandler = async ({ request }) => {
     // 收集需要获取的音频任务
     const tasks: Array<() => Promise<{ url: string; size: number; accent: string }>> = [];
 
-    if (phonetics.audio_url_us) {
+    // 3. 决定是否需要查询词典
+    // 如果已有音标信息且有有效的音频 URL，则跳过词典查询
+    // hasIpa 判断是否有已有音标
+    const hasIpa = (existingPhonetics?.ipa_us || existingPhonetics?.ipa_uk || existingPhonetics?.ipa);
+    const hasValidPhonetics = hasIpa ? (
+      phonetics.audio_url_us && phonetics.audio_url_us !== '无' ||
+      phonetics.audio_url_uk && phonetics.audio_url_uk !== '无' ||
+      phonetics.audio_url && phonetics.audio_url !== '无'
+    ) : (
+      // 没有已有音标，需要查询词典获取音标和音频
+      phonetics.audio_url_us && phonetics.audio_url_us !== '无' ||
+      phonetics.audio_url_uk && phonetics.audio_url_uk !== '无' ||
+      phonetics.audio_url && phonetics.audio_url !== '无'
+    );
+
+    // 如果没有有效的词典音标，直接返回空结果（不报错）
+    if (!hasValidPhonetics) {
+      return json({
+        success: true,
+        word: word.toLowerCase(),
+        provider: p,
+        mode: 'none'
+      });
+    }
+
+    if (phonetics.audio_url_us && phonetics.audio_url_us !== '无') {
       tasks.push(async () => {
         const data = await fetchAudio(word, 'us', p, txt);
         return uploadAudio(data, word, 'us');
       });
     }
 
-    if (phonetics.audio_url_uk) {
+    if (phonetics.audio_url_uk && phonetics.audio_url_uk !== '无') {
       tasks.push(async () => {
         const data = await fetchAudio(word, 'uk', p, txt);
         return uploadAudio(data, word, 'uk');
       });
     }
 
-    if (phonetics.audio_url) {
+    if (phonetics.audio_url && phonetics.audio_url !== '无') {
       tasks.push(async () => {
         const data = await fetchAudio(word, 'us', p, txt);
         return uploadAudio(data, word, 'common');

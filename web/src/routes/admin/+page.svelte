@@ -20,9 +20,7 @@
   let input = $state('');
   let adding = $state(false);
   let refreshing = $state<string | null>(null);
-  let models = $state<Array<{ id: string; name: string }>>([]);
-  let model = $state('kimi');
-  let llmFallback = $state(true);
+  let batchRefresh = $state({ loading: false, progress: null as { cur: number; total: number; word: string } | null, result: null as { ok: number; failed: string[] } | null });
 
   let batch = $state({ show: false, text: '', loading: false, progress: null as { cur: number; total: number; word: string } | null, result: null as { ok: number; failed: string[] } | null });
   let upload = $state({ show: false, mode: 'url' as 'url' | 'file', url: '', word: null as Word | null, err: '' });
@@ -36,10 +34,10 @@
     }
     initAuth();
     setTimeout(async () => {
-      if (authState.user) { authed = true; load(); loadModels(); }
+      if (authState.user) { authed = true; load(); }
       else {
         const { data } = await supabase.auth.getSession();
-        if (data.session?.user) { authState.user = data.session.user; authed = true; load(); loadModels(); }
+        if (data.session?.user) { authState.user = data.session.user; authed = true; load(); }
         else goto('/login');
       }
       authLoading = false;
@@ -52,11 +50,6 @@
     if (res.error) err = res.error;
     else words = res.data;
     loading = false;
-  }
-
-  async function loadModels() {
-    const res = await api.getModels();
-    models = res.models; model = res.defaultModel;
   }
 
   function tempWord(word: string): Word {
@@ -82,8 +75,8 @@
     const temp = tempWord(w); words = [temp, ...words];
     toast.show(`adding "${w}"...`, 'info');
     try {
-      const ipa = await api.fetchPhonetics(w, 'auto', llmFallback).catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
-      const tts = await api.fetchTTS(w, 'both', 'us', { audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+      const ipa = await api.fetchPhonetics(w, 'auto').catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+      const tts = await api.fetchTTS(w, 'both', 'us', { ipa_us: ipa.ipa_us, ipa_uk: ipa.ipa_uk, ipa: ipa.ipa, audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
       const res = await api.addWord({
         word: w,
         ipa_us: ipa.ipa_us,
@@ -106,8 +99,8 @@
     words = words.map(x => x.id === w.id ? { ...x, ipa_us: '', ipa_uk: '', ipa: '', audio_url_us: '', audio_url_uk: '', audio_url: '' } : x);
     toast.show(`refreshing "${w.word}"...`, 'info');
     try {
-      const ipa = await api.fetchPhonetics(w.word, 'auto', llmFallback).catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
-      const tts = await api.fetchTTS(w.word, 'both', 'us', { audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+      const ipa = await api.fetchPhonetics(w.word, 'auto').catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+      const tts = await api.fetchTTS(w.word, 'both', 'us', { ipa_us: ipa.ipa_us, ipa_uk: ipa.ipa_uk, ipa: ipa.ipa, audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
       if (!ipa.ipa_us && !ipa.ipa_uk && !ipa.ipa && !tts.audio_url_us && !tts.audio_url_uk && !tts.audio_url) {
         words = words.map(x => x.id === w.id ? orig : x);
         toast.show('failed', 'error');
@@ -136,6 +129,35 @@
     api.deleteWord(w.id).catch(() => { words = [...words, w]; toast.show('rm failed', 'error'); });
   }
 
+  async function refreshAll() {
+    if (!filtered.length) return;
+    batchRefresh.loading = true; batchRefresh.result = null;
+    let ok = 0; const failed: string[] = [];
+    for (let i = 0; i < filtered.length; i++) {
+      const w = filtered[i];
+      batchRefresh.progress = { cur: i + 1, total: filtered.length, word: w.word };
+      try {
+        const ipa = await api.fetchPhonetics(w.word, 'auto').catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+        const tts = await api.fetchTTS(w.word, 'both', 'us', { ipa_us: ipa.ipa_us, ipa_uk: ipa.ipa_uk, ipa: ipa.ipa, audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+        const res = await api.updateWord({
+          id: w.id,
+          ipa_us: ipa.ipa_us,
+          ipa_uk: ipa.ipa_uk,
+          ipa: ipa.ipa,
+          audio_url_us: tts.audio_url_us,
+          audio_url_uk: tts.audio_url_uk,
+          audio_url: tts.audio_url,
+          ipa_source: ipa.ipa_source
+        });
+        if (res.error) { failed.push(`${w.word}: ${res.error}`); }
+        else { ok++; words = words.map(x => x.id === w.id ? { ...x, ...res.data } : x); }
+      } catch (e) { failed.push(`${w.word}: ${e instanceof Error ? e.message : 'err'}`); }
+    }
+    batchRefresh.result = { ok, failed }; batchRefresh.loading = false; batchRefresh.progress = null;
+    if (ok) toast.show(`updated ${ok}`, 'success');
+    if (failed.length) toast.show(`failed ${failed.length}`, 'error');
+  }
+
   function play(w: Word, acc: Accent) {
     const url = acc === 'us' ? w.audio_url_us : acc === 'uk' ? w.audio_url_uk : w.audio_url;
     player.play(w.id, acc, url);
@@ -152,8 +174,8 @@
       const w = lines[i], id = temps[i].id;
       batch.progress = { cur: i + 1, total: lines.length, word: w };
       try {
-        const ipa = await api.fetchPhonetics(w, 'auto', llmFallback).catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
-        const tts = await api.fetchTTS(w, 'both', 'us', { audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+        const ipa = await api.fetchPhonetics(w, 'auto').catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+        const tts = await api.fetchTTS(w, 'both', 'us', { ipa_us: ipa.ipa_us, ipa_uk: ipa.ipa_uk, ipa: ipa.ipa, audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
         const res = await api.addWord({
           word: w,
           ipa_us: ipa.ipa_us,
@@ -266,16 +288,21 @@
         <div class="flex flex-wrap items-center gap-2 sm:gap-4">
           <span class="text-sm text-terminal-text-secondary hidden sm:inline">{authState.user?.email || 'user'}</span>
           {@render btn('logout', () => { signOut(); goto('/'); })}
-          <label class="flex items-center gap-1.5 text-sm text-terminal-text-secondary cursor-pointer hover:text-terminal-text-primary">
-            <input type="checkbox" bind:checked={llmFallback} class="accent-terminal-accent" />
-            <span>LLM</span>
-          </label>
-          <select bind:value={model} class="input-terminal px-2 py-1 text-sm flex-shrink-0">
-            {#each models as m (m.id)}<option value={m.id}>{m.name}</option>{/each}
-          </select>
+          {@render btn('全量更新', refreshAll, batchRefresh.loading, batchRefresh.loading)}
           {@render btn('batch', () => batch.show = true)}
         </div>
       </div>
+      {#if batchRefresh.progress}
+        <div class="border-t border-terminal-border px-4 py-2 bg-terminal-bg-secondary">
+          <div class="flex justify-between text-sm"><span>{batchRefresh.progress.word}</span><span>{batchRefresh.progress.cur}/{batchRefresh.progress.total}</span></div>
+          <div class="mt-1 h-1 bg-terminal-bg"><div class="h-full bg-terminal-accent" style="width: {(batchRefresh.progress.cur / batchRefresh.progress.total) * 100}%"></div></div>
+        </div>
+      {/if}
+      {#if batchRefresh.result}
+        <div class="border-t border-terminal-border px-4 py-2 text-sm {batchRefresh.result.failed.length ? 'text-terminal-warning' : 'text-terminal-accent'}">
+          updated {batchRefresh.result.ok}{#if batchRefresh.result.failed.length}, {batchRefresh.result.failed.length} failed{/if}
+        </div>
+      {/if}
     </header>
 
     <main class="mx-auto max-w-5xl px-4 py-4">

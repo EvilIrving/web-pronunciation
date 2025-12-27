@@ -1,7 +1,6 @@
-
 # PRD：Tech Vocabulary Index（程序员技术词汇发音索引）
 
-版本：v0.4
+版本：v0.5
 状态：MVP
 目标用户：不同语言背景程序员
 核心价值：避免技术词汇发音错误
@@ -71,7 +70,7 @@
 列表 Item 显示字段：
 
 * word
-* IPA 音标（通用音，不区分英美音）
+* IPA 音标（区分英美音）
 
 ---
 
@@ -87,17 +86,12 @@
 
 * 支持 CSV / JSON / 文本粘贴
 * 一行一个词或结构化导入
-* 导入时通过 AI 获取标准音标和发音，上传到对象存储
+* 导入时通过词典 API 获取标准音标和发音，上传到对象存储
 
 #### 数据校验
 
 * 去重（normalized）
 * 非法字符过滤
-
-#### AI 辅助处理
-
-* 自动获取 IPA 音标和发音
-* 管理员确认后写入
 
 权限说明：
 
@@ -125,11 +119,22 @@
   原始词形，例如 coroutine
 * normalized: string
   统一格式，用于搜索与去重
+* ipa_us: string
+  美式 IPA 音标
+* ipa_uk: string
+  英式 IPA 音标
 * ipa: string
-  IPA 音标（通用音标，不区分英美音）
+  通用 IPA 音标（可选）
+* audio_url_us: string
+  美音音频文件的 R2 URL
+* audio_url_uk: string
+  英音音频文件的 R2 URL
 * audio_url: string
-  发音音频文件的 R2 URL
+  通用音频文件的 R2 URL
+* ipa_source: string
+  音标来源：`dict`（词典）或 `null`
 * created_at: timestamp
+* updated_at: timestamp
 
 ---
 
@@ -140,31 +145,23 @@
 在添加或者导入时获取标准音标和发音，音频上传到对象存储，数据库保存对应 URL
 
 * 前端通过 URL 请求音频播放
-* 发音优先级（按顺序尝试）：
+* 发音来源优先级（按顺序尝试）：
 
-  有道词典真人发音（首选）- 来自 Forvo 等真人发音库
+  **有道词典真人发音（首选）**
+  * 来自 Forvo 等真人发音库
   * 通过 `youdao/client.ts` 获取
   * 无需 AI 生成，成本低，发音自然
   * 返回 `audio_url_us`, `audio_url_uk` 完整音频 URL
 
-  欧陆词典 - 作为有道的轮询备用
+  **欧陆词典**
+  * 作为有道的轮询备用
   * 通过 `eudic/parser.ts` 获取 HTML，解析音标和 frdic 音频参数
   * 输出格式与有道一致：`ipa_us`, `ipa_uk`, `audio_url_us`, `audio_url_uk`
   * 音频使用 frdic TTS API，无需额外签名
 
-  MiniMax T2A（AI 生成）
-  * 模型：speech-2.6-hd
-  * 支持参数：
-    * voice_id: 选择发音人
-    * speed: 语速
-    * vol: 音量
-    * pitch: 音调
-    * emotion: 情感（可选）
-  * pronunciation_dict: 可用于自定义读音映射
-
 * 对象存储：Cloudflare R2
-  * MiniMax API 返回 hex 编码音频，上传前需解码为二进制 mp3 文件
-  * R2 存储的是标准音频文件（非 hex），前端可直接通过 URL 播放
+  * 音频文件直接上传到 R2
+  * R2 存储的是标准音频文件，前端可直接通过 URL 播放
   * 数据库保存 R2 URL
 
 * Provider 轮询机制
@@ -175,7 +172,7 @@
 音标格式：
 
 * 使用 IPA（国际音标）
-* 暂时不区分英音/美音，提供通用发音选项
+* 区分英音/美音，提供两种发音选项
 
 ---
 
@@ -207,14 +204,6 @@
 * Supabase 内置全文搜索 + GIN index
 * 词汇量小，数据库足够
 
-AI 服务：
-
-* Moonshot AI（KIMI）：音标生成
-* MiniMax T2A：音频生成
-* 统一通过 OpenAI SDK 调用（兼容接口）
-* 仅用于批量导入时的音标和音频生成
-* 非运行时依赖（前端只播放音频）
-
 ---
 
 ## 项目代码结构
@@ -223,9 +212,7 @@ AI 服务：
 web-pronunciation/
 ├── docs/                         # 项目文档
 │   ├── prd.md                    # 产品需求文档
-│   ├── audio_api.md              # 音频 API 参考
-│   ├── kimi_text.md              # Kimi API 参考
-│   └── minimax_text_api.md       # MiniMax API 参考
+│   └── audio_api.md              # 音频 API 参考
 ├── supabase/                     # 数据库配置
 │   ├── types/database.ts         # 数据库类型定义
 │   ├── config.toml               # Supabase 配置
@@ -234,7 +221,6 @@ web-pronunciation/
 ├── web/                          # Web 应用主目录
 │   ├── src/
 │   │   ├── lib/                  # 共享库
-│   │   │   ├── llm/client.ts     # 统一 LLM 客户端
 │   │   │   ├── dictionary.ts     # 发音服务 API
 │   │   │   ├── supabase.ts       # Supabase 客户端
 │   │   │   ├── auth.svelte.ts    # 认证状态管理（Svelte rune）
@@ -246,8 +232,8 @@ web-pronunciation/
 │   │   │   ├── login/+page.svelte # 管理员登录
 │   │   │   ├── admin/+page.svelte # 后台管理
 │   │   │   └── api/              # API 路由
-│   │   │       ├── ipa/+server.ts   # IPA 音标生成
 │   │   │       ├── tts/+server.ts   # TTS 音频生成
+│   │   │       ├── phonetics/+server.ts # 音标获取
 │   │   │       └── words/+server.ts # 单词 CRUD
 │   │   ├── app.html              # HTML 模板
 │   │   └── app.d.ts              # 类型声明
@@ -264,13 +250,6 @@ web-pronunciation/
 
 ## 核心模块说明
 
-### LLM 客户端 (`src/lib/llm/client.ts`)
-
-* 统一封装 Moonshot AI (Kimi) 和 MiniMax 模型调用
-* 使用 OpenAI SDK 兼容接口
-* 支持动态切换模型
-* 导出 `generateIPA()` 和 `generateText()` 方法
-
 ### 有道词典客户端 (`src/lib/youdao/client.ts`)
 
 * 封装有道词典 API
@@ -281,13 +260,12 @@ web-pronunciation/
 
 * 从欧路词典 HTML 页面解析音标和音频
 * 输出格式与有道完全一致，便于统一处理
-* 音频使用 frdic TTS API（`pi.frdic.com/api/v2/speech/speakweb`）
+* 音频使用 frdic TTS API（`api.frdic.com/api/v2/speech/speakweb`）
 
 ### 音标获取 (`src/routes/api/phonetics/+server.ts`)
 
 * 支持 `youdao` / `eudic` / `auto` 三种 provider
 * `auto` 模式下轮询切换 provider 避免单点依赖和限流
-* 支持 LLM fallback：词典无音标时自动调用 AI 生成（可关闭）
 * 返回字段包含 `audio_url_us`, `audio_url_uk`, `audio_url`，供 TTS 复用
 
 ### 认证管理 (`src/lib/auth.svelte.ts`)
@@ -298,9 +276,7 @@ web-pronunciation/
 
 ### API 路由
 
-* `GET /api/phonetics` - 获取音标（支持 provider 轮询和 LLM fallback）
-* `POST /api/ipa` - 生成 IPA 音标（支持选择模型）
-* `GET /api/ipa` - 获取支持的模型列表
+* `GET /api/phonetics` - 获取音标（支持 provider 轮询）
 * `POST /api/tts` - 生成音频并上传到 R2（支持 `existingPhonetics` 复用音标查询结果，减少 API 调用）
 * `GET/POST/PUT/DELETE /api/words` - 单词 CRUD
 
@@ -310,8 +286,6 @@ web-pronunciation/
 * 快速添加单词（自动获取音标+音频）
 * 批量导入（每行一个单词）
 * 行内编辑与音频播放
-* LLM 模型选择器
-* LLM Fallback 开关：控制词典无音标时是否使用 AI 生成
 * 一键音频重新生成（浏览模式下直接操作）
 * 无音标有音频时显示 🔊：即使音标为空，只要有音频也能播放
 
@@ -338,7 +312,6 @@ web-pronunciation/
 * `@supabase/supabase-js` ^2.89.0 - Supabase 客户端
 * `@supabase/ssr` ^0.5.2 - Supabase SSR 支持
 * `@aws-sdk/client-s3` ^3.958.0 - R2 存储（S3 兼容）
-* `openai` ^6.15.0 - LLM 调用
 
 ---
 
@@ -388,20 +361,19 @@ web-pronunciation/
 
 ## 风险与边界
 
-* AI 音标和音频生成可能有成本，需要批量处理时注意配额
 * R2 存储需要配置正确的访问策略
 * 认证依赖 Supabase Auth，需确保用户已创建
 * 有道词典 API 签名问题：有道 API 的 `sign` 参数需要手动维护，签名失效时会返回错误词条（如查询 "Citrus" 返回 "eyetooth"）。当前解决方案是定期更新签名，发现问题后需要重新抓取有效的签名值。
+* 词典无数据时无法获取音标和发音（如生造词）
 
 ---
 
 ## 后续扩展（不纳入 MVP）
 
 * 高频词榜单
-* 英音/美音发音选项切换
 * Forvo 真人发音
-* AI 自动发现新技术词
 * 自定义发音映射（pronunciation_dict）
+* 社区贡献模式
 
 ---
 
@@ -428,7 +400,12 @@ web-pronunciation/
   "mode": "both" | "single",
   "accent": "us" | "uk",
   "provider": "youdao" | "frdic" | "minimax",
-  "txt": "自定义文本（可选）"
+  "existingPhonetics": {
+    "ipa_us": "kəˈruː.teɪʃ",
+    "ipa_uk": "kəˈruː.teɪʃ",
+    "audio_url_us": "...",
+    "audio_url_uk": "..."
+  }
 }
 ```
 
@@ -438,7 +415,7 @@ web-pronunciation/
 | mode | 否 | `both` - 获取两种发音，`single` - 获取单个（默认） |
 | accent | 否 | `us` 或 `uk`，仅 mode=single 时有效 |
 | provider | 否 | 优先使用的发音源，默认 `youdao` |
-| txt | 否 | 自定义发音文本，默认使用 word |
+| existingPhonetics | 否 | 已有的音标信息，用于复用查询结果 |
 
 发音源优先级:
 
@@ -484,7 +461,7 @@ web-pronunciation/
 }
 ```
 
-> 当词典无有效音标数据时（如生造词 "SukiUI"），直接返回空结果，不报错也不尝试 AI 生成。
+> 当词典无有效音标数据时（如生造词 "SukiUI"），直接返回空结果。
 
 响应 - 错误:
 
@@ -496,100 +473,52 @@ web-pronunciation/
 
 ---
 
-### MiniMax T2A 音频生成
+### 音标获取 API
 
-```bash
-curl --request POST \
-  --url https://api.minimaxi.com/v1/t2a_v2 \
-  --header 'Authorization: Bearer <token>' \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "model": "speech-2.6-hd",
-    "text": "coroutine",
-    "stream": false,
-    "voice_setting": {
-      "voice_id": "male-qn-qingse",
-      "speed": 1,
-      "vol": 1,
-      "pitch": 0,
-      "emotion": "neutral"
-    },
-    "audio_setting": {
-      "sample_rate": 32000,
-      "bitrate": 128000,
-      "format": "mp3",
-      "channel": 1
-    },
-    "subtitle_enable": false
-  }'
-```
+接口: GET /api/phonetics
 
-响应：
+请求参数:
+
+| 参数 | 必填 | 说明 |
+| ------ | ------ | ------ |
+| word | 是 | 要查询的单词 |
+| provider | 否 | `youdao` / `eudic` / `auto`，默认 `auto` |
+
+响应 - 成功:
 
 ```json
 {
-  "data": {
-    "audio": "<hex编码的audio>",
-    "status": 2
-  },
-  "extra_info": {
-    "audio_length": 9900,
-    "audio_sample_rate": 32000,
-    "audio_size": 160323,
-    "bitrate": 128000,
-    "word_count": 1,
-    "usage_characters": 10,
-    "audio_format": "mp3",
-    "audio_channel": 1
-  },
-  "trace_id": "01b8bf9bb7433cc75c18eee6cfa8fe21",
-  "base_resp": {
-    "status_code": 0,
-    "status_msg": "success"
-  }
+  "success": true,
+  "word": "coroutine",
+  "ipa_us": "kəˈruː.teɪʃ",
+  "ipa_uk": "kəˈruː.teɪʃ",
+  "audio_url_us": "https://...",
+  "audio_url_uk": "https://...",
+  "provider": "youdao",
+  "ipa_source": "dict"
 }
 ```
 
----
-
-### Moonshot AI（KIMI）音标生成
-
-```bash
-curl https://api.moonshot.cn/v1/chat/completions \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $MOONSHOT_API_KEY" \
-    -d '{
-        "model": "kimi-k2-turbo-preview",
-        "messages": [
-            {"role": "system", "content": "你是 Kimi，由 Moonshot AI 提供的人工智能助手。你擅长提供技术词汇的 IPA 国际音标。对于给定的技术词汇，只返回 IPA 音标，不要有其他解释。"},
-            {"role": "user", "content": "coroutine"}
-        ],
-        "temperature": 0.3
-    }'
-```
-
-响应：
+响应 - 无数据:
 
 ```json
 {
-    "id": "cmpl-04ea926191a14749b7f2c7a48a68abc6",
-    "object": "chat.completion",
-    "created": 1698999496,
-    "model": "kimi-k2-turbo-preview",
-    "choices": [
-        {
-            "index": 0,
-            "message": {
-                "role": "assistant",
-                "content": "kəˈruː.teɪʃ"
-            },
-            "finish_reason": "stop"
-        }
-    ],
-    "usage": {
-        "prompt_tokens": 19,
-        "completion_tokens": 21,
-        "total_tokens": 40
-    }
+  "success": true,
+  "word": "sukiui",
+  "ipa_us": null,
+  "ipa_uk": null,
+  "audio_url_us": null,
+  "audio_url_uk": null,
+  "provider": "youdao",
+  "ipa_source": null
+}
+```
+
+响应 - 限流:
+
+```json
+{
+  "error": "rate limited",
+  "retry_after": 12
 }
 ```
