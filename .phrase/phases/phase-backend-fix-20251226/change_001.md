@@ -68,14 +68,15 @@
   - 上传过程中显示加载状态
   - 支持格式验证和文件大小限制
 
-### Refactor - TTS 改用真人发音（frdic.com）
+### Refactor - TTS 改用真人发音（frdic.com），保留 AI 备用
 - **Modify**: `web/src/routes/api/tts/+server.ts`:
-  - 移除 MiniMax T2A API 调用
   - 新增 `encodeWordToFrdic()` 函数 - 将单词编码为 frdic 格式（QYN + Base64）
   - 新增 `fetchAudioFromFrdic()` 函数 - 从 frdic.com 获取真人发音
-  - 使用有道词典真人发音 API（美音 en_us_female）
-  - 保留 R2 上传逻辑，音频获取后仍保存到 R2
+  - 新增 `fetchAudioFromMiniMax()` 函数 - 保留 MiniMax AI 音频获取逻辑
+  - 新增 `generateAudio()` 函数 - 支持选择发音源
+  - API 支持 `provider` 参数：`frdic`（默认，真人发音）或 `minimax`（AI 发音）
+  - 保留 R2 上传逻辑，音频获取后保存到 R2
 - **Behavior**:
-  - 音频生成改为调用 frdic.com 真人发音接口
-  - 发音质量比 AI 生成更好，更准确
-  - 后台 "🔊" 按钮现在生成真人发音
+  - 默认使用 frdic.com 真人发音（美音 en_us_female）
+  - 如需切换回 AI 发音，调用时传入 `{ word: "xxx", provider: "minimax" }`
+  - 代码保持可回退，frdic 接口不可用时可快速切换
