@@ -158,6 +158,8 @@
     try {
       const params = new URLSearchParams();
       if (searchQuery) params.set('search', searchQuery);
+      // 获取所有数据（不使用分页）
+      params.set('limit', '10000');
 
       const response = await fetch(`/api/words?${params.toString()}`);
       const result = await response.json();

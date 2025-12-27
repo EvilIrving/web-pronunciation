@@ -14,7 +14,7 @@
   let currentAudio = $state<HTMLAudioElement | null>(null);
   let playingWordId = $state<string | null>(null);
 
-  const LIMIT = 20;
+  const LIMIT = 100;
   let searchTimeout: ReturnType<typeof setTimeout>;
 
   // 加载词汇

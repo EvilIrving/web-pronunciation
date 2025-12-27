@@ -89,6 +89,7 @@
   - `importBatch()`: 立即将所有单词添加到列表顶部，每项成功替换为真实数据，失败移除
   - `uploadAudioByUrl()`: 立即清空 audio_url 显示上传中状态，失败恢复原 URL
   - `handleFileSelect()`: 立即清空 audio_url 显示上传中状态，失败恢复原 URL
+  - `loadWords()`: 获取所有数据（limit=10000），不再分页
 - **Behavior**:
   - 添加/编辑/批量导入/音频操作后不再重新加载整个列表
   - 保持与删除操作一致的优雅交互体验

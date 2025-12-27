@@ -137,23 +137,22 @@ PRD：Tech Vocabulary Index（程序员技术词汇发音索引）
 
 实现方式：
 
-在添加或者导入时通过 AI 获取标准音标和发音，音频上传到对象存储，数据库保存对应 URL
+在添加或者导入时获取标准音标和发音，音频上传到对象存储，数据库保存对应 URL
 
 * 前端通过 URL 请求音频播放
-* AI 服务：
-
-  * 音标获取：Moonshot AI（KIMI 模型）
-    * 模型：kimi-k2-turbo-preview 或 moonshot-v1-8k
-    * 用于从词汇生成标准 IPA 音标
-  * 音频生成：MiniMax T2A API
-    * 模型：speech-2.6-hd
-    * 支持参数：
-      * voice_id: 选择发音人
-      * speed: 语速
-      * vol: 音量
-      * pitch: 音调
-      * emotion: 情感（可选）
-    * pronunciation_dict: 可用于自定义读音映射
+* 发音优先级（按顺序尝试）：
+  1. **有道词典真人发音**（首选）- 来自 Forvo 等真人发音库
+     * 通过 `dictionary.ts` 服务获取
+     * 无需 AI 生成，成本低，发音自然
+  2. **MiniMax T2A**（备用）- AI 生成音频
+     * 模型：speech-2.6-hd
+     * 支持参数：
+       * voice_id: 选择发音人
+       * speed: 语速
+       * vol: 音量
+       * pitch: 音调
+       * emotion: 情感（可选）
+     * pronunciation_dict: 可用于自定义读音映射
 * 对象存储：Cloudflare R2
   * MiniMax API 返回 hex 编码音频，上传前需解码为二进制 mp3 文件
   * R2 存储的是标准音频文件（非 hex），前端可直接通过 URL 播放
@@ -252,51 +251,57 @@ web-pronunciation/
 七.2 核心模块说明
 
 1. **LLM 客户端** (`src/lib/llm/client.ts`)
-   - 统一封装 Moonshot AI (Kimi) 和 MiniMax 模型调用
-   - 使用 OpenAI SDK 兼容接口
-   - 支持动态切换模型
-   - 导出 `generateIPA()` 和 `generateText()` 方法
+   * 统一封装 Moonshot AI (Kimi) 和 MiniMax 模型调用
+   * 使用 OpenAI SDK 兼容接口
+   * 支持动态切换模型
+   * 导出 `generateIPA()` 和 `generateText()` 方法
 
-2. **认证管理** (`src/lib/auth.svelte.ts`)
-   - 使用 Svelte 5 runes 管理认证状态
-   - localStorage 持久化用户登录状态
-   - 导出 `authState`、`signIn`、`signOut`、`initAuth` 方法
+2. **发音服务** (`src/lib/dictionary.ts`)
+   * 封装有道词典真人发音 API
+   * 优先使用 Forvo 等真人发音
+   * 支持音标自动获取
+   * 降级到 MiniMax TTS 作为备用方案
 
-3. **API 路由**
-   - `POST /api/ipa` - 生成 IPA 音标（支持选择模型）
-   - `GET /api/ipa` - 获取支持的模型列表
-   - `POST /api/tts` - 生成音频并上传到 R2
-   - `GET/POST/PUT/DELETE /api/words` - 单词 CRUD
+3. **认证管理** (`src/lib/auth.svelte.ts`)
+   * 使用 Svelte 5 runes 管理认证状态
+   * localStorage 持久化用户登录状态
+   * 导出 `authState`、`signIn`、`signOut`、`initAuth` 方法
 
-4. **后台管理** (`src/routes/admin/+page.svelte`)
-   - 词汇列表管理（搜索、编辑、删除）
-   - 快速添加单词（自动获取音标+音频）
-   - 批量导入（每行一个单词）
-   - 行内编辑与音频播放
-   - LLM 模型选择器
-   - **一键音频重新生成**（浏览模式下直接操作）
+4. **API 路由**
+   * `POST /api/ipa` - 生成 IPA 音标（支持选择模型）
+   * `GET /api/ipa` - 获取支持的模型列表
+   * `POST /api/tts` - 生成音频并上传到 R2
+   * `GET/POST/PUT/DELETE /api/words` - 单词 CRUD
 
-5. **登录页面** (`src/routes/login/+page.svelte`)
-   - 管理员登录页面
-   - 登录成功后自动跳转到后台
+5. **后台管理** (`src/routes/admin/+page.svelte`)
+   * 词汇列表管理（搜索、编辑、删除）
+   * 快速添加单词（自动获取音标+音频）
+   * 批量导入（每行一个单词）
+   * 行内编辑与音频播放
+   * LLM 模型选择器
+   * **一键音频重新生成**（浏览模式下直接操作）
 
-6. **数据库触发器**
-   - `generate_normalized()` - 自动生成 normalized 字段
-   - `update_updated_at_column()` - 自动更新时间戳
-   - RLS 策略：公开读取，认证用户可写入
+6. **登录页面** (`src/routes/login/+page.svelte`)
+   * 管理员登录页面
+   * 登录成功后自动跳转到后台
+
+7. **数据库触发器**
+   * `generate_normalized()` - 自动生成 normalized 字段
+   * `update_updated_at_column()` - 自动更新时间戳
+   * RLS 策略：公开读取，认证用户可写入
 
 ---
 
 七.3 依赖清单
 
 核心依赖：
-- `@sveltejs/kit` ^2.49.1 - SvelteKit 框架
-- `svelte` ^5.45.6 - Svelte 5（使用 runes 响应式）
-- `tailwindcss` ^4.1.17 - Tailwind CSS 4
-- `@supabase/supabase-js` ^2.89.0 - Supabase 客户端
-- `@supabase/ssr` ^0.5.2 - Supabase SSR 支持
-- `@aws-sdk/client-s3` ^3.958.0 - R2 存储（S3 兼容）
-- `openai` ^6.15.0 - LLM 调用
+* `@sveltejs/kit` ^2.49.1 - SvelteKit 框架
+* `svelte` ^5.45.6 - Svelte 5（使用 runes 响应式）
+* `tailwindcss` ^4.1.17 - Tailwind CSS 4
+* `@supabase/supabase-js` ^2.89.0 - Supabase 客户端
+* `@supabase/ssr` ^0.5.2 - Supabase SSR 支持
+* `@aws-sdk/client-s3` ^3.958.0 - R2 存储（S3 兼容）
+* `openai` ^6.15.0 - LLM 调用
 
 ---
 
@@ -315,7 +320,31 @@ web-pronunciation/
 * **操作列布局**：
   * 浏览模式：🔊 重新生成音频 | 编辑 | 删除
   * 编辑模式：仅保存 | 取消（无音频生成）
+* **乐观更新**：所有列表操作（添加/编辑/批量导入/音频操作）都采用乐观更新策略，操作后立即在本地更新 UI，无需等待 API 响应，失败时自动回滚并显示 Toast 提示
 * 零教学，零引导，面向管理员
+
+---
+
+八.1 用户体验优化
+
+### 乐观更新（Optimistic UI）
+
+为保证流畅的交互体验，所有列表操作均采用乐观更新策略：
+
+| 操作类型 | 乐观更新行为 | 失败回滚 |
+|----------|-------------|----------|
+| 快速添加 | 立即在列表顶部显示临时词条 | 移除临时词条，Toast 提示 |
+| 行内编辑 | 立即更新本地数据 | 恢复原始数据，Toast 提示 |
+| 重新生成音频 | 立即清空音频显示"生成中" | 恢复原音频 URL，Toast 提示 |
+| 批量导入 | 立即在列表顶部显示所有词条 | 移除失败的词条，Toast 提示 |
+| URL 上传音频 | 立即清空音频显示"上传中" | 恢复原音频 URL，Toast 提示 |
+| 文件上传音频 | 立即清空音频显示"上传中" | 恢复原音频 URL，Toast 提示 |
+
+### Toast 通知
+
+* 操作成功/失败通过 Toast 组件显示简洁提示
+* 删除操作提供撤销按钮（5 秒内可撤销）
+* Toast 自动消失，不阻塞用户操作
 
 ---
 
