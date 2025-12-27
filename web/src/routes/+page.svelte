@@ -103,14 +103,17 @@
   {/if}
 {/snippet}
 
-<svelte:head><title>pron</title></svelte:head>
+<svelte:head>
+    <title>技术词汇发音 | Tech Vocabulary Index</title>
+    <meta name="description" content="程序员技术词汇发音索引。收录 coroutine、cache、daemon、enum 等常用技术词汇的 IPA 音标和标准发音。">
+  </svelte:head>
 
 <div class="min-h-screen bg-terminal-bg text-terminal-text-secondary font-mono text-sm leading-relaxed">
   <header class="sticky top-0 z-10 flex items-center gap-2 px-3 py-3 bg-terminal-bg-secondary border-b border-terminal-border safe-area-inset-top">
     <span class="text-terminal-accent shrink-0">$</span>
     <input 
       type="text" 
-      placeholder="grep ..." 
+      placeholder="grep ... (搜索技术词汇如: coroutine, cache)" 
       value={searchQuery} 
       oninput={search}
       class="flex-1 min-w-0 bg-transparent border-none outline-none text-terminal-text-primary font-mono caret-terminal-accent placeholder:text-terminal-text-muted py-2"
@@ -124,7 +127,7 @@
     {#if !isInitialized}
       <p class="text-terminal-text-muted py-4 text-center">loading...</p>
     {:else if !words.length}
-      <p class="text-terminal-text-muted py-4 text-center">no match{searchQuery ? ` for "${searchQuery}"` : ''}</p>
+      <p class="text-terminal-text-muted py-4 text-center">无匹配结果{searchQuery ? `："${searchQuery}"` : ''}</p>
     {:else}
       <VirtualList
         items={words}

@@ -1,3 +1,26 @@
-# allow crawling everything by default
+# robots.txt - Tech Vocabulary Index
+# Allow all search engines to crawl public pages
+
+# Default: Allow everything
 User-agent: *
-Disallow:
+Allow: /
+
+# Disallow admin pages
+Disallow: /admin
+Disallow: /login
+Disallow: /api/
+
+# Googlebot
+User-agent: Googlebot
+Allow: /
+
+# Bingbot
+User-agent: Bingbot
+Allow: /
+
+# Baiduspider
+User-agent: Baiduspider
+Allow: /
+
+# Sitemap
+Sitemap: https://pronunciation.dev/sitemap.xml

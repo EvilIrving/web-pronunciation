@@ -1,8 +1,52 @@
-<!doctype html>
+a<!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		
+		<!-- 百度自动推送 -->
+		<script>
+		(function(){
+			var bp = document.createElement('script');
+			var curProtocol = window.location.protocol.split(':')[0];
+			if (curProtocol === 'https') {
+				bp.src = 'https://zz.bdstatic.com/linksubmit/push.js';
+			} else {
+				bp.src = 'http://push.zhanzhang.baidu.com/push.js';
+			}
+			var s = document.getElementsByTagName("script")[0];
+			s.parentNode.insertBefore(bp, s);
+		})();
+		</script>
+
+		<!-- SEO Meta Tags (中文优化) -->
+		<title>技术词汇发音 | Tech Vocabulary Index - 程序员必备</title>
+		<meta name="description" content="程序员技术词汇发音索引。收录 coroutine、cache、daemon、enum 等常用技术词汇的 IPA 音标和标准发音。一键播放，听懂并读对每一个技术术语。">
+		<meta name="keywords" content="技术词汇发音,IPA音标,程序员英语发音,coroutine发音,cache读音,daemon怎么读,enum发音,技术术语读音">
+		
+		<!-- Open Graph -->
+		<meta property="og:title" content="技术词汇发音 | Tech Vocabulary Index">
+		<meta property="og:description" content="收录常用技术词汇的 IPA 音标和标准发音。coroutine、cache、daemon、enum... 一键播放，听懂并读对每一个技术术语。">
+		<meta property="og:type" content="website">
+		
+		<!-- 结构化数据 -->
+		<script type="application/ld+json">
+		{
+			"@context": "https://schema.org",
+			"@type": "WebSite",
+			"name": "技术词汇发音索引",
+			"alternateName": "Tech Vocabulary Index",
+			"url": "https://pronunciation.dev/",
+			"description": "程序员技术词汇发音索引，提供技术术语的 IPA 音标和标准发音。",
+			"targetType": "https://schema.org/EntryPoint",
+			"action": {
+				"@type": "SearchAction",
+				"target": "https://pronunciation.dev/?q={search_term_string}",
+				"query-input": "required name=search_term_string"
+			}
+		}
+		</script>
+
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
