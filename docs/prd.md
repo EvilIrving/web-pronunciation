@@ -1,7 +1,7 @@
 
 PRD：Tech Vocabulary Index（程序员技术词汇发音索引）
 
-版本：v0.3
+版本：v0.4
 状态：MVP
 目标用户：不同语言背景程序员
 核心价值：避免技术词汇发音错误
@@ -262,30 +262,39 @@ web-pronunciation/
    * 支持音标自动获取
    * 降级到 MiniMax TTS 作为备用方案
 
-3. **认证管理** (`src/lib/auth.svelte.ts`)
+3. **音标获取** (`src/routes/api/phonetics/+server.ts`)
+   * 支持 `youdao` / `eudic` / `auto` 三种 provider
+   * `auto` 模式下轮询切换 provider 避免单点依赖和限流
+   * 支持 LLM fallback：词典无音标时自动调用 AI 生成（可关闭）
+   * 返回字段包含 `audio_url_us`, `audio_url_uk`, `audio_url`，供 TTS 复用
+
+4. **认证管理** (`src/lib/auth.svelte.ts`)
    * 使用 Svelte 5 runes 管理认证状态
    * localStorage 持久化用户登录状态
    * 导出 `authState`、`signIn`、`signOut`、`initAuth` 方法
 
-4. **API 路由**
+5. **API 路由**
+   * `GET /api/phonetics` - 获取音标（支持 provider 轮询和 LLM fallback）
    * `POST /api/ipa` - 生成 IPA 音标（支持选择模型）
    * `GET /api/ipa` - 获取支持的模型列表
-   * `POST /api/tts` - 生成音频并上传到 R2
+   * `POST /api/tts` - 生成音频并上传到 R2（支持 `existingPhonetics` 复用音标查询结果，减少 API 调用）
    * `GET/POST/PUT/DELETE /api/words` - 单词 CRUD
 
-5. **后台管理** (`src/routes/admin/+page.svelte`)
+6. **后台管理** (`src/routes/admin/+page.svelte`)
    * 词汇列表管理（搜索、编辑、删除）
    * 快速添加单词（自动获取音标+音频）
    * 批量导入（每行一个单词）
    * 行内编辑与音频播放
    * LLM 模型选择器
+   * **LLM Fallback 开关**：控制词典无音标时是否使用 AI 生成
    * **一键音频重新生成**（浏览模式下直接操作）
+   * **无音标有音频时显示 🔊**：即使音标为空，只要有音频也能播放
 
-6. **登录页面** (`src/routes/login/+page.svelte`)
+7. **登录页面** (`src/routes/login/+page.svelte`)
    * 管理员登录页面
    * 登录成功后自动跳转到后台
 
-7. **数据库触发器**
+8. **数据库触发器**
    * `generate_normalized()` - 自动生成 normalized 字段
    * `update_updated_at_column()` - 自动更新时间戳
    * RLS 策略：公开读取，认证用户可写入
@@ -312,6 +321,7 @@ web-pronunciation/
 * 打开即是词列表
 * 搜索即过滤
 * 点击词对应的 IPA 音标或播放按钮即可发音
+* 无音标有音频时显示 🔊，可点击播放
 
 后台交互设计原则：
 
@@ -353,6 +363,7 @@ web-pronunciation/
 * AI 音标和音频生成可能有成本，需要批量处理时注意配额
 * R2 存储需要配置正确的访问策略
 * 认证依赖 Supabase Auth，需确保用户已创建
+* **有道词典 API 签名问题**：有道 API 的 `sign` 参数需要手动维护，签名失效时会返回错误词条（如查询 "Citrus" 返回 "eyetooth"）。当前解决方案是定期更新签名，发现问题后需要重新抓取有效的签名值。
 
 ---
 
@@ -377,7 +388,73 @@ web-pronunciation/
 
 十二、API 参考
 
-12.1 MiniMax T2A 音频生成
+12.1 TTS 音频生成 API
+
+**接口**: `POST /api/tts`
+
+**请求参数**:
+
+```json
+{
+  "word": "coroutine",
+  "mode": "both" | "single",
+  "accent": "us" | "uk",
+  "provider": "youdao" | "frdic" | "minimax",
+  "txt": "自定义文本（可选）"
+}
+```
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| word | 是 | 要生成发音的单词 |
+| mode | 否 | `both` - 获取两种发音，`single` - 获取单个（默认） |
+| accent | 否 | `us` 或 `uk`，仅 mode=single 时有效 |
+| provider | 否 | 优先使用的发音源，默认 `youdao` |
+| txt | 否 | 自定义发音文本，默认使用 word |
+
+**发音源优先级**:
+
+当指定 provider 为 `youdao` 时，实际会按以下顺序尝试：
+1. 有道词典 → 2. Frdic → 3. MiniMax
+
+**响应 - 两种发音（mode: both）**:
+
+```json
+{
+  "success": true,
+  "audio_url_us": "https://...",
+  "audio_url_uk": "https://...",
+  "audio_size_us": 12345,
+  "audio_size_uk": 12345,
+  "mode": "both",
+  "provider": "youdao"
+}
+```
+
+**响应 - 单个发音（mode: single）**:
+
+```json
+{
+  "success": true,
+  "audio_url": "https://...",
+  "audio_size": 12345,
+  "accent": "uk",
+  "provider": "youdao",
+  "mode": "single"
+}
+```
+
+**响应 - 错误**:
+
+```json
+{
+  "error": "youdao audio: 500"
+}
+```
+
+---
+
+12.2 MiniMax T2A 音频生成
 
 ```bash
 curl --request POST \

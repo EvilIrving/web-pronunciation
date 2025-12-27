@@ -16,8 +16,10 @@ export async function addWord(data: {
   word: string;
   ipa_us?: string;
   ipa_uk?: string;
+  ipa?: string;
   audio_url_us?: string;
   audio_url_uk?: string;
+  audio_url?: string;
   ipa_source?: IpaSource;
 }) {
   const res = await fetch('/api/words', {
@@ -52,26 +54,57 @@ export async function fetchIPA(word: string, provider: string) {
   return { ipa_us: json.ipa_us || '', ipa_uk: json.ipa_uk || '' };
 }
 
-export async function fetchPhonetics(word: string, provider: 'youdao' | 'eudic' = 'youdao') {
-  const res = await fetch(`/api/phonetics?word=${encodeURIComponent(word)}&provider=${provider}`);
+export async function fetchPhonetics(word: string, provider: 'auto' | 'youdao' | 'eudic' = 'auto', fallback: boolean = true, retries: number = 3): Promise<{
+  ipa_us: string;
+  ipa_uk: string;
+  ipa: string;
+  ipa_source: IpaSource;
+  audio_url_us: string;
+  audio_url_uk: string;
+  audio_url: string;
+}> {
+  const res = await fetch(`/api/phonetics?word=${encodeURIComponent(word)}&provider=${provider}&fallback=${fallback}`);
+
+  // 处理限流：等待后自动重试
+  if (res.status === 429) {
+    const json = await res.json();
+    const waitSeconds = json.retry_after || 12;
+    console.log(`[api] 速率限制，等待 ${waitSeconds} 秒后重试`);
+    await new Promise(r => setTimeout(r, waitSeconds * 1000));
+    if (retries > 0) return fetchPhonetics(word, provider, fallback, retries - 1);
+    throw new Error('rate limited');
+  }
+
   const json = await res.json();
   if (!res.ok || !json.success) throw new Error(json.error || 'Phonetics failed');
-  return { ipa_us: json.ipa_us || '', ipa_uk: json.ipa_uk || '', ipa_source: json.ipa_source as IpaSource };
+  return {
+    ipa_us: json.ipa_us || '',
+    ipa_uk: json.ipa_uk || '',
+    ipa: json.ipa || '',
+    ipa_source: json.ipa_source as IpaSource,
+    audio_url_us: json.audio_url_us || '',
+    audio_url_uk: json.audio_url_uk || '',
+    audio_url: json.audio_url || ''
+  };
 }
 
 export async function fetchEudic(word: string) {
   return fetchPhonetics(word, 'eudic');
 }
 
-export async function fetchTTS(word: string, mode: 'single' | 'both' = 'both', accent: Accent = 'us') {
+export async function fetchTTS(word: string, mode: 'single' | 'both' = 'both', accent: Accent = 'us', existingPhonetics?: { audio_url_us: string; audio_url_uk: string; audio_url: string }) {
   const res = await fetch('/api/tts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ word, mode, accent }),
+    body: JSON.stringify({ word, mode, accent, existingPhonetics }),
   });
   const json = await res.json();
   if (!res.ok) throw new Error('TTS failed');
-  return { audio_url_us: json.audio_url_us || '', audio_url_uk: json.audio_url_uk || '' };
+  return {
+    audio_url_us: json.audio_url_us || '',
+    audio_url_uk: json.audio_url_uk || '',
+    audio_url: json.audio_url || ''
+  };
 }
 
 export async function uploadAudio(opts: { url?: string; file?: File; word: string }) {
@@ -92,7 +125,7 @@ export async function uploadAudio(opts: { url?: string; file?: File; word: strin
   }
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || 'upload failed');
-  return { audio_url_us: json.audio_url_us };
+  return { audio_url: json.audio_url };
 }
 
 export async function getModels() {

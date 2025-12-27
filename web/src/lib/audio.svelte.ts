@@ -1,4 +1,4 @@
-type Accent = 'us' | 'uk';
+type Accent = 'us' | 'uk' | 'common';
 
 class AudioPlayer {
   playing = $state<{ id: string; accent: Accent } | null>(null);

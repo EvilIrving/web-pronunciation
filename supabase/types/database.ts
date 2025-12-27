@@ -10,7 +10,7 @@
 // 表类型
 // ============================================
 
-export type IpaSource = 'dict' | 'llm' | null;
+export type IpaSource = 'youdao' | 'llm' | null;
 
 export interface Word {
   id: string;
@@ -22,6 +22,9 @@ export interface Word {
   // 英音字段
   ipa_uk: string | null;
   audio_url_uk: string | null;
+  // 通用音标字段（用于只有一种发音的词）
+  ipa: string | null;
+  audio_url: string | null;
   // 音标来源
   ipa_source: IpaSource;
   created_at: string;
@@ -31,20 +34,32 @@ export interface Word {
 // 创建词汇时的输入类型（省略自动生成的字段）
 export interface WordInsert {
   word: string;
+  // 美音字段
   ipa_us?: string | null;
   audio_url_us?: string | null;
+  // 英音字段
   ipa_uk?: string | null;
   audio_url_uk?: string | null;
+  // 通用音标字段
+  ipa?: string | null;
+  audio_url?: string | null;
+  // 音标来源
   ipa_source?: IpaSource;
 }
 
 // 更新词汇时的输入类型（所有字段可选）
 export interface WordUpdate {
   word?: string;
+  // 美音字段
   ipa_us?: string | null;
   audio_url_us?: string | null;
+  // 英音字段
   ipa_uk?: string | null;
   audio_url_uk?: string | null;
+  // 通用音标字段
+  ipa?: string | null;
+  audio_url?: string | null;
+  // 音标来源
   ipa_source?: IpaSource;
 }
 

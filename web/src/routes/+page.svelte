@@ -3,7 +3,7 @@
   import type { Word } from '$lib/types';
   import VirtualList from '$lib/components/VirtualList.svelte';
 
-  type Accent = 'us' | 'uk';
+  type Accent = 'us' | 'uk' | 'common';
 
   let words = $state<Word[]>([]);
   let searchQuery = $state('');
@@ -65,8 +65,14 @@
     debounce = setTimeout(() => { hasMore = true; load(true); }, 300);
   }
 
+  function getAudioUrl(word: Word, accent: Accent): string | null {
+    if (accent === 'us') return word.audio_url_us;
+    if (accent === 'uk') return word.audio_url_uk;
+    return word.audio_url;
+  }
+
   function play(word: Word, accent: Accent) {
-    const url = accent === 'us' ? word.audio_url_us : word.audio_url_uk;
+    const url = getAudioUrl(word, accent);
     if (!url) return;
 
     audio?.pause();
@@ -87,6 +93,12 @@
     return playing?.id === word.id && playing?.accent === accent;
   }
 
+  function getIpaText(word: Word, accent: Accent): string {
+    if (accent === 'us') return word.ipa_us?.replace(/^\/+|\/+$/g, '') ?? '';
+    if (accent === 'uk') return word.ipa_uk?.replace(/^\/+|\/+$/g, '') ?? '';
+    return word.ipa?.replace(/^\/+|\/+$/g, '') ?? '';
+  }
+
   onMount(() => {
     console.log('%c错了不要紧，顺口就是好。', 'color: #666; font-style: italic;');
     checkMobile(); load(true); window.addEventListener('resize', checkMobile);
@@ -94,22 +106,21 @@
 </script>
 
 {#snippet ipa(word: Word, accent: Accent)}
-  {@const isUs = accent === 'us'}
-  {@const rawIpa = isUs ? word.ipa_us : word.ipa_uk}
-  {@const ipaText = rawIpa?.replace(/^\/+|\/+$/g, '') ?? ''}
-  {@const hasAudio = isUs ? word.audio_url_us : word.audio_url_uk}
+  {@const ipaText = getIpaText(word, accent)}
+  {@const hasAudio = !!getAudioUrl(word, accent)}
   {@const active = isPlaying(word, accent)}
   {@const isAI = word.ipa_source === 'llm'}
-  {#if ipaText}
+  {@const label = accent === 'us' ? 'US' : accent === 'uk' ? 'UK' : 'EN'}
+  {#if ipaText || hasAudio}
     {#if hasAudio}
-      <button 
-        onclick={() => play(word, accent)} 
+      <button
+        onclick={() => play(word, accent)}
         class="bg-transparent border-none p-0 font-mono text-terminal-accent cursor-pointer hover:text-terminal-accent-hover {active ? 'text-terminal-accent-active' : ''}"
       >
-        <sub class="text-[9px] text-terminal-text-muted mr-1">{isUs ? 'US' : 'UK'}</sub>/{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}{#if active}<span class="ml-1">▮▮</span>{/if}
+        <sub class="text-[9px] text-terminal-text-muted mr-1">{label}</sub>{#if ipaText}/{ipaText}/{:else}🔊{/if}{#if isAI && ipaText}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}{#if active}<span class="ml-1">▮▮</span>{/if}
       </button>
     {:else}
-      <span class="text-terminal-disabled cursor-default"><sub class="text-[9px] text-terminal-text-muted mr-1">{isUs ? 'US' : 'UK'}</sub>/{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}</span>
+      <span class="text-terminal-disabled cursor-default"><sub class="text-[9px] text-terminal-text-muted mr-1">{label}</sub>/{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}</span>
     {/if}
   {/if}
 {/snippet}
@@ -119,15 +130,15 @@
     <meta name="description" content="程序员技术词汇发音索引。收录 coroutine、cache、daemon、enum 等常用技术词汇的 IPA 音标和标准发音。">
   </svelte:head>
 
-<div class="min-h-screen bg-terminal-bg text-terminal-text-secondary font-mono text-sm leading-relaxed">
+<div class="min-h-screen bg-terminal-bg text-terminal-text-secondary font-mono text-sm leading-relaxed no-select">
   <header class="sticky top-0 z-10 flex items-center gap-2 px-3 py-3 bg-terminal-bg-secondary border-b border-terminal-border safe-area-inset-top">
     <span class="text-terminal-accent shrink-0">$</span>
-    <input 
-      type="text" 
-      placeholder="grep ... (搜搜看自己读错美，如: coroutine, cache)" 
-      value={searchQuery} 
+    <input
+      type="text"
+      placeholder="grep ... (搜搜看自己读错美，如: coroutine, cache)"
+      value={searchQuery}
       oninput={search}
-      class="flex-1 min-w-0 bg-transparent border-none outline-none text-terminal-text-primary font-mono caret-terminal-accent placeholder:text-terminal-text-muted py-2"
+      class="flex-1 min-w-0 bg-transparent border-none outline-none text-terminal-text-primary font-mono caret-terminal-accent placeholder:text-terminal-text-muted py-2 select-text"
     />
     {#if !isMobile}
       <span class="text-terminal-text-dim text-xs shrink-0">{total} entries</span>
@@ -163,13 +174,13 @@
             <div class="flex-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
               {@render ipa(word, 'us')}
               {@render ipa(word, 'uk')}
+              {@render ipa(word, 'common')}
             </div>
           </div>
         {/snippet}
       </VirtualList>
       {#if isLoading}<p class="text-terminal-text-muted py-4 text-center text-sm">...</p>{/if}
-      {#if !hasMore}<p class="text-terminal-text-muted py-4 text-center text-sm">-- EOF --</p>
-        <p class="text-terminal-text-dim text-xs text-center pb-4">错了不要紧，顺口就是好。</p>{/if}
+      {#if !hasMore}<p class="text-terminal-text-dim text-xs text-center pb-2 pt-4">--- 错了不要紧，顺口就是好 ---</p>{/if}
     {/if}
   </main>
 </div>

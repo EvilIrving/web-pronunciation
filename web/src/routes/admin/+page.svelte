@@ -9,7 +9,7 @@
   import { player } from '$lib/audio.svelte';
   import * as api from '$lib/api';
 
-  type Accent = 'us' | 'uk';
+  type Accent = 'us' | 'uk' | 'common';
 
   let words = $state<Word[]>([]);
   let loading = $state(true);
@@ -22,6 +22,7 @@
   let refreshing = $state<string | null>(null);
   let models = $state<Array<{ id: string; name: string }>>([]);
   let model = $state('kimi');
+  let llmFallback = $state(true);
 
   let batch = $state({ show: false, text: '', loading: false, progress: null as { cur: number; total: number; word: string } | null, result: null as { ok: number; failed: string[] } | null });
   let upload = $state({ show: false, mode: 'url' as 'url' | 'file', url: '', word: null as Word | null, err: '' });
@@ -59,7 +60,20 @@
   }
 
   function tempWord(word: string): Word {
-    return { id: `temp-${Date.now()}`, word, ipa_us: null, audio_url_us: null, ipa_uk: null, audio_url_uk: null, ipa_source: null, normalized: word.toLowerCase(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    return {
+      id: `temp-${Date.now()}`,
+      word,
+      ipa_us: null,
+      audio_url_us: null,
+      ipa_uk: null,
+      audio_url_uk: null,
+      ipa: null,
+      audio_url: null,
+      ipa_source: null,
+      normalized: word.toLowerCase(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
   }
 
   async function add() {
@@ -68,9 +82,18 @@
     const temp = tempWord(w); words = [temp, ...words];
     toast.show(`adding "${w}"...`, 'info');
     try {
-      const ipa = await api.fetchPhonetics(w).catch(() => ({ ipa_us: '', ipa_uk: '', ipa_source: null as import('$lib/types').IpaSource }));
-      const tts = await api.fetchTTS(w).catch(() => ({ audio_url_us: '', audio_url_uk: '' }));
-      const res = await api.addWord({ word: w, ipa_us: ipa.ipa_us || ipa.ipa_uk, ipa_uk: ipa.ipa_uk, audio_url_us: tts.audio_url_us, audio_url_uk: tts.audio_url_uk, ipa_source: ipa.ipa_source });
+      const ipa = await api.fetchPhonetics(w, 'auto', llmFallback).catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+      const tts = await api.fetchTTS(w, 'both', 'us', { audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+      const res = await api.addWord({
+        word: w,
+        ipa_us: ipa.ipa_us,
+        ipa_uk: ipa.ipa_uk,
+        ipa: ipa.ipa,
+        audio_url_us: tts.audio_url_us,
+        audio_url_uk: tts.audio_url_uk,
+        audio_url: tts.audio_url,
+        ipa_source: ipa.ipa_source
+      });
       if (res.error) throw new Error(res.error);
       words = words.map(x => x.id === temp.id ? { ...x, ...res.data } : x);
       toast.show(`added "${w}"`, 'success');
@@ -80,13 +103,27 @@
 
   async function refresh(w: Word) {
     refreshing = w.id; const orig = { ...w };
-    words = words.map(x => x.id === w.id ? { ...x, ipa_us: '', ipa_uk: '', audio_url_us: '', audio_url_uk: '' } : x);
+    words = words.map(x => x.id === w.id ? { ...x, ipa_us: '', ipa_uk: '', ipa: '', audio_url_us: '', audio_url_uk: '', audio_url: '' } : x);
     toast.show(`refreshing "${w.word}"...`, 'info');
     try {
-      const ipa = await api.fetchPhonetics(w.word).catch(() => ({ ipa_us: '', ipa_uk: '', ipa_source: null as import('$lib/types').IpaSource }));
-      const tts = await api.fetchTTS(w.word).catch(() => ({ audio_url_us: '', audio_url_uk: '' }));
-      if (!ipa.ipa_us && !ipa.ipa_uk && !tts.audio_url_us) { words = words.map(x => x.id === w.id ? orig : x); toast.show('failed', 'error'); refreshing = null; return; }
-      const res = await api.updateWord({ id: w.id, ipa_us: ipa.ipa_us || ipa.ipa_uk, ipa_uk: ipa.ipa_uk, audio_url_us: tts.audio_url_us, audio_url_uk: tts.audio_url_uk, ipa_source: ipa.ipa_source });
+      const ipa = await api.fetchPhonetics(w.word, 'auto', llmFallback).catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+      const tts = await api.fetchTTS(w.word, 'both', 'us', { audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+      if (!ipa.ipa_us && !ipa.ipa_uk && !ipa.ipa && !tts.audio_url_us && !tts.audio_url_uk && !tts.audio_url) {
+        words = words.map(x => x.id === w.id ? orig : x);
+        toast.show('failed', 'error');
+        refreshing = null;
+        return;
+      }
+      const res = await api.updateWord({
+        id: w.id,
+        ipa_us: ipa.ipa_us,
+        ipa_uk: ipa.ipa_uk,
+        ipa: ipa.ipa,
+        audio_url_us: tts.audio_url_us,
+        audio_url_uk: tts.audio_url_uk,
+        audio_url: tts.audio_url,
+        ipa_source: ipa.ipa_source
+      });
       if (res.error) throw new Error(res.error);
       words = words.map(x => x.id === w.id ? { ...x, ...res.data } : x);
       toast.show(`refreshed "${w.word}"`, 'success');
@@ -99,7 +136,10 @@
     api.deleteWord(w.id).catch(() => { words = [...words, w]; toast.show('rm failed', 'error'); });
   }
 
-  function play(w: Word, acc: Accent) { player.play(w.id, acc, acc === 'us' ? w.audio_url_us : w.audio_url_uk); }
+  function play(w: Word, acc: Accent) {
+    const url = acc === 'us' ? w.audio_url_us : acc === 'uk' ? w.audio_url_uk : w.audio_url;
+    player.play(w.id, acc, url);
+  }
 
   async function importBatch() {
     const lines = batch.text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -112,13 +152,22 @@
       const w = lines[i], id = temps[i].id;
       batch.progress = { cur: i + 1, total: lines.length, word: w };
       try {
-        const ipa = await api.fetchPhonetics(w).catch(() => ({ ipa_us: '', ipa_uk: '', ipa_source: null as import('$lib/types').IpaSource }));
-        const tts = await api.fetchTTS(w).catch(() => ({ audio_url_us: '', audio_url_uk: '' }));
-        const res = await api.addWord({ word: w, ipa_us: ipa.ipa_us || ipa.ipa_uk, ipa_uk: ipa.ipa_uk, audio_url_us: tts.audio_url_us, audio_url_uk: tts.audio_url_uk, ipa_source: ipa.ipa_source });
+        const ipa = await api.fetchPhonetics(w, 'auto', llmFallback).catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+        const tts = await api.fetchTTS(w, 'both', 'us', { audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
+        const res = await api.addWord({
+          word: w,
+          ipa_us: ipa.ipa_us,
+          ipa_uk: ipa.ipa_uk,
+          ipa: ipa.ipa,
+          audio_url_us: tts.audio_url_us,
+          audio_url_uk: tts.audio_url_uk,
+          audio_url: tts.audio_url,
+          ipa_source: ipa.ipa_source
+        });
         if (res.error) { failed.push(`${w}: ${res.error}`); words = words.filter(x => x.id !== id); }
         else { ok++; words = words.map(x => x.id === id ? { ...x, ...res.data } : x); }
       } catch (e) { failed.push(`${w}: ${e instanceof Error ? e.message : 'err'}`); words = words.filter(x => x.id !== id); }
-      if (i < lines.length - 1) await new Promise(r => setTimeout(r, 3000));
+      // API 会自动处理限流，无需手动等待
     }
     batch.result = { ok, failed }; batch.loading = false; batch.progress = null;
     if (ok) toast.show(`imported ${ok}`, 'success');
@@ -129,29 +178,29 @@
     const url = upload.url.trim();
     try { new URL(url); } catch { upload.err = 'invalid url'; return; }
     if (!upload.word) return;
-    const { id, word } = upload.word, orig = upload.word.audio_url_us;
-    upload.show = false; words = words.map(x => x.id === id ? { ...x, audio_url_us: '' } : x);
+    const { id, word } = upload.word, orig = upload.word.audio_url;
+    upload.show = false; words = words.map(x => x.id === id ? { ...x, audio_url: '' } : x);
     toast.show(`uploading...`, 'info');
     try {
-      const { audio_url_us } = await api.uploadAudio({ url, word });
-      await api.updateWord({ id, audio_url_us });
-      words = words.map(x => x.id === id ? { ...x, audio_url_us } : x);
+      const { audio_url } = await api.uploadAudio({ url, word });
+      await api.updateWord({ id, audio_url });
+      words = words.map(x => x.id === id ? { ...x, audio_url } : x);
       toast.show('uploaded', 'success');
-    } catch (e) { words = words.map(x => x.id === id ? { ...x, audio_url_us: orig } : x); toast.show(e instanceof Error ? e.message : 'failed', 'error'); }
+    } catch (e) { words = words.map(x => x.id === id ? { ...x, audio_url: orig } : x); toast.show(e instanceof Error ? e.message : 'failed', 'error'); }
   }
 
   async function handleFile(e: Event) {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file || !upload.word) return;
-    const { id, word } = upload.word, orig = upload.word.audio_url_us;
-    upload.show = false; words = words.map(x => x.id === id ? { ...x, audio_url_us: '' } : x);
+    const { id, word } = upload.word, orig = upload.word.audio_url;
+    upload.show = false; words = words.map(x => x.id === id ? { ...x, audio_url: '' } : x);
     toast.show('uploading...', 'info');
     try {
-      const { audio_url_us } = await api.uploadAudio({ file, word });
-      await api.updateWord({ id, audio_url_us });
-      words = words.map(x => x.id === id ? { ...x, audio_url_us } : x);
+      const { audio_url } = await api.uploadAudio({ file, word });
+      await api.updateWord({ id, audio_url });
+      words = words.map(x => x.id === id ? { ...x, audio_url } : x);
       toast.show('uploaded', 'success');
-    } catch (e) { words = words.map(x => x.id === id ? { ...x, audio_url_us: orig } : x); toast.show(e instanceof Error ? e.message : 'failed', 'error'); }
+    } catch (e) { words = words.map(x => x.id === id ? { ...x, audio_url: orig } : x); toast.show(e instanceof Error ? e.message : 'failed', 'error'); }
     if (fileRef) fileRef.value = '';
   }
 </script>
@@ -167,16 +216,18 @@
 {/snippet}
 
 {#snippet ipa(w: Word, acc: Accent)}
-  {@const txt = acc === 'us' ? w.ipa_us : w.ipa_uk}
-  {@const url = acc === 'us' ? w.audio_url_us : w.audio_url_uk}
+  {@const txt = acc === 'us' ? w.ipa_us : acc === 'uk' ? w.ipa_uk : w.ipa}
+  {@const url = acc === 'us' ? w.audio_url_us : acc === 'uk' ? w.audio_url_uk : w.audio_url}
   {@const active = player.isPlaying(w.id, acc)}
-  {@const color = acc === 'us' ? 'text-terminal-info' : 'text-terminal-accent'}
-  {#if txt}
+  {@const color = acc === 'us' ? 'text-terminal-info' : acc === 'uk' ? 'text-terminal-accent' : 'text-terminal-warning'}
+  {@const label = acc === 'us' ? 'US' : acc === 'uk' ? 'UK' : 'EN'}
+  {#if txt || url}
     {#if url}
       <button onclick={() => play(w, acc)} class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-transparent cursor-pointer {color} hover:bg-terminal-bg-hover {active ? 'border-terminal-accent bg-terminal-bg-hover' : ''}">
-        <span>{txt}</span>{#if active}<span class="animate-pulse">▮▮</span>{/if}
+        <span class="text-xs text-terminal-text-muted">{label}</span>
+        <span>{txt || '🔊'}</span>{#if active}<span class="animate-pulse">▮▮</span>{/if}
       </button>
-    {:else}<span class="text-terminal-text-muted px-1.5 py-0.5">{txt}</span>{/if}
+    {:else}<span class="text-terminal-text-muted px-1.5 py-0.5"><span class="text-xs text-terminal-text-muted">{label}</span> {txt}</span>{/if}
   {:else}<span class="text-terminal-text-dim">-</span>{/if}
 {/snippet}
 
@@ -215,6 +266,10 @@
         <div class="flex flex-wrap items-center gap-2 sm:gap-4">
           <span class="text-sm text-terminal-text-secondary hidden sm:inline">{authState.user?.email || 'user'}</span>
           {@render btn('logout', () => { signOut(); goto('/'); })}
+          <label class="flex items-center gap-1.5 text-sm text-terminal-text-secondary cursor-pointer hover:text-terminal-text-primary">
+            <input type="checkbox" bind:checked={llmFallback} class="accent-terminal-accent" />
+            <span>LLM</span>
+          </label>
           <select bind:value={model} class="input-terminal px-2 py-1 text-sm flex-shrink-0">
             {#each models as m (m.id)}<option value={m.id}>{m.name}</option>{/each}
           </select>
@@ -242,13 +297,14 @@
       {:else}
         <div class="border border-terminal-border">
           <table class="table-terminal">
-            <thead><tr><th class="w-32">word</th><th class="w-48">us</th><th class="w-48">uk</th><th class="w-64 text-right">actions</th></tr></thead>
+            <thead><tr><th class="w-32">word</th><th class="w-48">us</th><th class="w-48">uk</th><th class="w-48">en</th><th class="w-64 text-right">actions</th></tr></thead>
             <tbody>
               {#each filtered as w (w.id)}
                 <tr>
                   <td class="py-2 font-medium text-terminal-text-primary">{w.word}</td>
                   <td class="py-2 text-sm">{@render ipa(w, 'us')}</td>
                   <td class="py-2 text-sm">{@render ipa(w, 'uk')}</td>
+                  <td class="py-2 text-sm">{@render ipa(w, 'common')}</td>
                   <td class="py-2 text-right text-sm">{@render acts(w)}</td>
                 </tr>
               {/each}

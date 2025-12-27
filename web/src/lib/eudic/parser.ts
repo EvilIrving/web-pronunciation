@@ -67,18 +67,38 @@ export function parseEudicResponse(html: string, word: string): EudicParsedData 
     /data-rel="([^"]*voicename=en_us_female[^"]*)"[^>]*><span class="phontype">美<\/span><span class="Phonitic">([^<]+)<\/span>/
   );
 
+  // 解析单个发音块（没有 phontype 标识的）
+  // 格式：<a ... data-rel="langid=en&amp;txt=QYN..."></a><span class="Phonitic">/xxx/</span>
+  const singleVoiceMatch = html.match(
+    /data-rel="(langid=en[^"]*txt=[^"]+)"[^>]*><\/a><span class="Phonitic">\/([^<]+)\/<\/span>/
+  );
+
   // 备用方法：直接查找所有 Phonitic 标签（按顺序：英式、美式）
   const allPhoneticMatches = [...html.matchAll(/<span class="Phonitic">\/([^<]+)\/<\/span>/g)];
 
-  // 提取音标
-  const ipaUk = ukBlockMatch ? cleanIPA(ukBlockMatch[2]) :
-                (allPhoneticMatches[0] ? cleanIPA(allPhoneticMatches[0][1]) : null);
-  const ipaUs = usBlockMatch ? cleanIPA(usBlockMatch[2]) :
-                (allPhoneticMatches[1] ? cleanIPA(allPhoneticMatches[1][1]) : null);
+  // 提取音标（有 /xxx/ 格式的才提取，否则为 null）
+  let ipaUk = ukBlockMatch ? cleanIPA(ukBlockMatch[2]) :
+                (allPhoneticMatches[0] && allPhoneticMatches[0][1] ? cleanIPA(allPhoneticMatches[0][1]) : null);
+  let ipaUs = usBlockMatch ? cleanIPA(usBlockMatch[2]) :
+                (allPhoneticMatches[1] && allPhoneticMatches[1][1] ? cleanIPA(allPhoneticMatches[1][1]) : null);
 
   // 提取发音参数
-  const voiceUk = ukBlockMatch ? parseVoiceParams(ukBlockMatch[1]) : null;
-  const voiceUs = usBlockMatch ? parseVoiceParams(usBlockMatch[1]) : null;
+  let voiceUk = ukBlockMatch ? parseVoiceParams(ukBlockMatch[1]) : null;
+  let voiceUs = usBlockMatch ? parseVoiceParams(usBlockMatch[1]) : null;
+
+  // 处理单个发音块的情况：没有 voicename，但有 langid 和 txt
+  // 只提取发音参数，音标保持 null（和有道一致，有道把通用音标存在单独的 phone 字段）
+  if (singleVoiceMatch && !voiceUk && !voiceUs) {
+    const dataRel = singleVoiceMatch[1].replace(/&amp;/g, '&');
+    const params = new URLSearchParams(dataRel);
+    const langid = params.get('langid');
+    const txt = params.get('txt');
+
+    if (langid && txt) {
+      voiceUs = { langid, voicename: 'en_us_female', txt };
+      // 注意：单个音标不分配给 ipa_us/ipa_uk，保持 null
+    }
+  }
 
   console.log(`[Eudic] Parsed IPA: UK=${ipaUk}, US=${ipaUs}`);
   console.log(`[Eudic] Voice params: UK=${voiceUk?.txt || 'none'}, US=${voiceUs?.txt || 'none'}`);

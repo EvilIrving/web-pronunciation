@@ -58,7 +58,24 @@ export async function fetchMinimax(text: string): Promise<Uint8Array> {
 export type Provider = 'youdao' | 'frdic' | 'minimax';
 
 export async function fetchAudio(word: string, accent = 'us', provider: Provider = 'youdao', encodedTxt?: string): Promise<Uint8Array> {
-  if (provider === 'youdao') return fetchYoudao(word, accent as 'us' | 'uk');
-  if (provider === 'minimax') return fetchMinimax(word);
-  return fetchFrdic(word, accent, encodedTxt);
+  const providers: Provider[] = provider === 'youdao'
+    ? ['youdao', 'frdic', 'minimax']
+    : provider === 'frdic'
+      ? ['frdic', 'minimax']
+      : ['minimax'];
+
+  let lastError: Error | null = null;
+
+  for (const p of providers) {
+    try {
+      if (p === 'youdao') return fetchYoudao(word, accent as 'us' | 'uk');
+      if (p === 'minimax') return fetchMinimax(word);
+      return fetchFrdic(word, accent, encodedTxt);
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      console.warn(`[TTS] ${p} failed, trying next provider:`, lastError.message);
+    }
+  }
+
+  throw lastError || new Error('all providers failed');
 }

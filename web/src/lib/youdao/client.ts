@@ -5,17 +5,19 @@ export interface YoudaoResult {
   word: string;
   ipa_us: string | null;
   ipa_uk: string | null;
-  audio_us: string;
-  audio_uk: string;
+  ipa: string | null;
+  audio_url_us: string | null;
+  audio_url_uk: string | null;
+  audio_url: string | null;
 }
 
 function sign(word: string): string {
-  return '0cebf013168af8e008aa3823d8ee36aa';
+  return '6b7cc97822fa580d061129c050f49de8';
 }
 
 export async function getPhonetics(word: string): Promise<YoudaoResult> {
   console.log(`[Youdao] 查询音标: "${word}"`);
-  
+
   const form = new URLSearchParams({
     q: word, le: 'en', t: '3', client: 'web',
     sign: sign(word), keyfrom: 'webdict'
@@ -35,17 +37,35 @@ export async function getPhonetics(word: string): Promise<YoudaoResult> {
   const data = await res.json();
   const w = data?.simple?.word?.[0];
 
-  console.log(data?.simple,'simple');
-  
-  const result = {
+  console.log('[Youdao] 返回数据:', JSON.stringify(w, null, 2));
+
+  // 判断返回类型
+  const hasUsIpa = !!w?.usphone;
+  const hasUkIpa = !!w?.ukphone;
+  const hasCommonIpa = !!w?.phone;
+  const hasCommonSpeech = !!w?.speech;
+  const hasUsSpeech = !!w?.usspeech;
+  const hasUkSpeech = !!w?.ukspeech;
+
+  const result: YoudaoResult = {
     word: word.toLowerCase(),
-    ipa_us: w?.usphone || null,
-    ipa_uk: w?.ukphone || null,
-    audio_us: `${VOICE}?audio=${encodeURIComponent(word)}&type=2`,
-    audio_uk: `${VOICE}?audio=${encodeURIComponent(word)}&type=1`
+    ipa_us: hasUsIpa ? w.usphone : null,
+    ipa_uk: hasUkIpa ? w.ukphone : null,
+    ipa: hasCommonIpa ? w.phone : null,
+    audio_url_us: hasUsSpeech ? `${VOICE}?${w.usspeech}&type=2` : null,
+    audio_url_uk: hasUkSpeech ? `${VOICE}?${w.ukspeech}&type=1` : null,
+    audio_url: hasCommonSpeech ? `${VOICE}?${w.speech}&type=2` : null
   };
 
-//   console.log(`[Youdao] 查询成功: "${word}" -> US: ${result.ipa_us || '无'}, UK: ${result.ipa_uk || '无'}`);
+  console.log(`[Youdao] 解析结果:`, {
+    ipa_us: result.ipa_us,
+    ipa_uk: result.ipa_uk,
+    ipa: result.ipa,
+    audio_url_us: result.audio_url_us ? '有' : '无',
+    audio_url_uk: result.audio_url_uk ? '有' : '无',
+    audio_url: result.audio_url ? '有' : '无'
+  });
+
   return result;
 }
 
