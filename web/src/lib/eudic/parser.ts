@@ -1,29 +1,23 @@
 /**
- * 欧路词典 HTML 解析器
+ * 欧路词典解析器
  * 从 dict.eudic.net 返回的 HTML 中提取音标和音频 URL
+ *
+ * 输出格式与有道相同：
+ * - ipa_us/ipa_uk: 美/英音音标
+ * - audio_url_us/audio_url_uk: 完整音频 URL（使用 frdic TTS）
  */
 
-// 欧路词典 API 基础 URL
 const EUDIC_API_BASE = 'https://dict.eudic.net/dicts';
+const FRDIC_URL = 'https://api.frdic.com/api/v2/speech/speakweb';
 
-/**
- * 发音参数（从 data-rel 提取）
- */
-export interface VoiceParams {
-  langid: string;
-  voicename: string;
-  txt: string;  // 已编码的文本，可直接用于 frdic API
-}
-
-/**
- * 欧路词典解析结果
- */
-export interface EudicParsedData {
+interface EudicResult {
   word: string;
-  ipa_uk: string | null;
   ipa_us: string | null;
-  voice_uk: VoiceParams | null;  // 英式发音参数
-  voice_us: VoiceParams | null;  // 美式发音参数
+  ipa_uk: string | null;
+  ipa: string | null;
+  audio_url_us: string | null;
+  audio_url_uk: string | null;
+  audio_url: string | null;
 }
 
 /**
@@ -37,15 +31,14 @@ function cleanIPA(ipa: string): string {
  * 从 data-rel 属性解析发音参数
  * data-rel="langid=en&amp;voicename=en_uk_male&amp;txt=QYNYmV0YQ%3d%3d"
  */
-function parseVoiceParams(dataRel: string): VoiceParams | null {
-  // HTML 实体解码 &amp; -> &
+function parseVoiceParams(dataRel: string): { langid: string; voicename: string; txt: string } | null {
   const decoded = dataRel.replace(/&amp;/g, '&');
   const params = new URLSearchParams(decoded);
-  
+
   const langid = params.get('langid');
   const voicename = params.get('voicename');
   const txt = params.get('txt');
-  
+
   if (langid && voicename && txt) {
     return { langid, voicename, txt };
   }
@@ -53,62 +46,63 @@ function parseVoiceParams(dataRel: string): VoiceParams | null {
 }
 
 /**
- * 解析欧路词典 HTML 响应
- * 提取音标和发音参数（可直接用于 frdic TTS API）
+ * 从 voice params 构建 frdic 音频 URL
  */
-export function parseEudicResponse(html: string, word: string): EudicParsedData {
-  // 解析英式发音块：data-rel + 音标
+function buildAudioUrl(voiceParams: { langid: string; voicename: string; txt: string }): string {
+  return `${FRDIC_URL}?langid=${voiceParams.langid}&voicename=${voiceParams.voicename}&txt=${voiceParams.txt}`;
+}
+
+/**
+ * 解析欧路词典 HTML 响应
+ */
+export function parseEudicResponse(html: string, word: string): EudicResult {
+  // 英式发音块
   const ukBlockMatch = html.match(
     /data-rel="([^"]*voicename=en_uk_male[^"]*)"[^>]*><span class="phontype">英<\/span><span class="Phonitic">([^<]+)<\/span>/
   );
 
-  // 解析美式发音块：data-rel + 音标
+  // 美式发音块
   const usBlockMatch = html.match(
     /data-rel="([^"]*voicename=en_us_female[^"]*)"[^>]*><span class="phontype">美<\/span><span class="Phonitic">([^<]+)<\/span>/
   );
 
-  // 解析单个发音块（没有 phontype 标识的）
-  // 格式：<a ... data-rel="langid=en&amp;txt=QYN..."></a><span class="Phonitic">/xxx/</span>
-  const singleVoiceMatch = html.match(
-    /data-rel="(langid=en[^"]*txt=[^"]+)"[^>]*><\/a><span class="Phonitic">\/([^<]+)\/<\/span>/
-  );
-
-  // 备用方法：直接查找所有 Phonitic 标签（按顺序：英式、美式）
+  // 备用：查找所有 Phonitic 标签（按顺序：英式、美式）
   const allPhoneticMatches = [...html.matchAll(/<span class="Phonitic">\/([^<]+)\/<\/span>/g)];
 
-  // 提取音标（有 /xxx/ 格式的才提取，否则为 null）
-  let ipaUk = ukBlockMatch ? cleanIPA(ukBlockMatch[2]) :
-                (allPhoneticMatches[0] && allPhoneticMatches[0][1] ? cleanIPA(allPhoneticMatches[0][1]) : null);
-  let ipaUs = usBlockMatch ? cleanIPA(usBlockMatch[2]) :
-                (allPhoneticMatches[1] && allPhoneticMatches[1][1] ? cleanIPA(allPhoneticMatches[1][1]) : null);
+  // 提取音标
+  const ipaUk = ukBlockMatch ? cleanIPA(ukBlockMatch[2]) :
+                (allPhoneticMatches[0]?.[1] ? cleanIPA(allPhoneticMatches[0][1]) : null);
+  const ipaUs = usBlockMatch ? cleanIPA(usBlockMatch[2]) :
+                (allPhoneticMatches[1]?.[1] ? cleanIPA(allPhoneticMatches[1][1]) : null);
 
-  // 提取发音参数
-  let voiceUk = ukBlockMatch ? parseVoiceParams(ukBlockMatch[1]) : null;
-  let voiceUs = usBlockMatch ? parseVoiceParams(usBlockMatch[1]) : null;
+  // 提取发音参数并构建音频 URL
+  let audio_url_uk: string | null = null;
+  let audio_url_us: string | null = null;
 
-  // 处理单个发音块的情况：没有 voicename，但有 langid 和 txt
-  // 只提取发音参数，音标保持 null（和有道一致，有道把通用音标存在单独的 phone 字段）
-  if (singleVoiceMatch && !voiceUk && !voiceUs) {
-    const dataRel = singleVoiceMatch[1].replace(/&amp;/g, '&');
-    const params = new URLSearchParams(dataRel);
-    const langid = params.get('langid');
-    const txt = params.get('txt');
-
-    if (langid && txt) {
-      voiceUs = { langid, voicename: 'en_us_female', txt };
-      // 注意：单个音标不分配给 ipa_us/ipa_uk，保持 null
+  if (ukBlockMatch) {
+    const voiceParams = parseVoiceParams(ukBlockMatch[1]);
+    if (voiceParams) {
+      audio_url_uk = buildAudioUrl(voiceParams);
     }
   }
 
-  console.log(`[Eudic] Parsed IPA: UK=${ipaUk}, US=${ipaUs}`);
-  console.log(`[Eudic] Voice params: UK=${voiceUk?.txt || 'none'}, US=${voiceUs?.txt || 'none'}`);
+  if (usBlockMatch) {
+    const voiceParams = parseVoiceParams(usBlockMatch[1]);
+    if (voiceParams) {
+      audio_url_us = buildAudioUrl(voiceParams);
+    }
+  }
+
+  console.log(`[Eudic] Parsed: word="${word}", ipa_uk=${ipaUk}, ipa_us=${ipaUs}, audio_uk=${!!audio_url_uk}, audio_us=${!!audio_url_us}`);
 
   return {
     word: word.toLowerCase(),
-    ipa_uk: ipaUk,
     ipa_us: ipaUs,
-    voice_uk: voiceUk,
-    voice_us: voiceUs,
+    ipa_uk: ipaUk,
+    ipa: null,  // 欧陆不提供通用音标
+    audio_url_us: audio_url_us,
+    audio_url_uk: audio_url_uk,
+    audio_url: null,
   };
 }
 
@@ -117,31 +111,28 @@ export function parseEudicResponse(html: string, word: string): EudicParsedData 
  */
 export async function fetchEudicPage(word: string): Promise<string> {
   const url = `${EUDIC_API_BASE}/MiniDictSearch2?word=${encodeURIComponent(word)}`;
+  console.log(`[Eudic] Fetch: ${url}`);
 
-  console.log(`[Eudic] Fetching: ${url}`);
-
-  const response = await fetch(url, {
+  const res = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`Eudic API error: ${response.status} ${response.statusText}`);
+  if (!res.ok) {
+    throw new Error(`Eudic: ${res.status}`);
   }
 
-  const html = await response.text();
-  console.log(`[Eudic] HTML received: ${html.length} characters`);
-
+  const html = await res.text();
+  console.log(`[Eudic] Received: ${html.length} chars`);
   return html;
 }
 
 /**
- * 获取单词音标（从欧路词典）
+ * 获取单词音标和音频（从欧路词典）
  */
-export async function getPhonetics(word: string): Promise<EudicParsedData> {
+export async function getPhonetics(word: string): Promise<EudicResult> {
   const html = await fetchEudicPage(word);
   return parseEudicResponse(html, word);
 }
