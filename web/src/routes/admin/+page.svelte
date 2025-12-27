@@ -210,12 +210,12 @@
     {/if}
 
     <header class="sticky top-0 z-40 border-b border-terminal-border bg-terminal-bg-secondary">
-      <div class="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
+      <div class="mx-auto max-w-7xl px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-0 sm:justify-between">
         <h1 class="text-lg">$ <span class="text-terminal-accent">admin</span></h1>
-        <div class="flex items-center gap-4">
-          <span class="text-sm text-terminal-text-secondary">{authState.user?.email || 'user'}</span>
+        <div class="flex flex-wrap items-center gap-2 sm:gap-4">
+          <span class="text-sm text-terminal-text-secondary hidden sm:inline">{authState.user?.email || 'user'}</span>
           {@render btn('logout', () => { signOut(); goto('/'); })}
-          <select bind:value={model} class="input-terminal px-2 py-1 text-sm">
+          <select bind:value={model} class="input-terminal px-2 py-1 text-sm flex-shrink-0">
             {#each models as m (m.id)}<option value={m.id}>{m.name}</option>{/each}
           </select>
           {@render btn('batch', () => batch.show = true)}

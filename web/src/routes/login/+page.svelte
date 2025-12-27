@@ -39,16 +39,16 @@
   }
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-  <div class="max-w-md w-full space-y-8">
+<div class="flex min-h-screen items-center justify-center bg-terminal-bg py-12 px-4 font-mono">
+  <div class="max-w-sm w-full space-y-6">
     <div>
-      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
-        管理员登录
+      <h2 class="text-center text-lg text-terminal-text-primary">
+        $ <span class="text-terminal-accent">login</span>
       </h2>
     </div>
 
-    <form class="mt-8 space-y-6" onsubmit={handleSubmit}>
-      <div class="rounded-md shadow-sm -space-y-px">
+    <form class="space-y-4" onsubmit={handleSubmit}>
+      <div class="space-y-3">
         <div>
           <label for="email-address" class="sr-only">邮箱地址</label>
           <input
@@ -58,8 +58,8 @@
             autocomplete="email"
             required
             bind:value={email}
-            class="relative block w-full rounded-t-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-            placeholder="邮箱地址"
+            class="input-terminal w-full px-3 py-2 text-sm"
+            placeholder="email"
           />
         </div>
         <div>
@@ -71,29 +71,29 @@
             autocomplete="current-password"
             required
             bind:value={password}
-            class="relative block w-full rounded-b-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-            placeholder="密码"
+            class="input-terminal w-full px-3 py-2 text-sm"
+            placeholder="password"
           />
         </div>
       </div>
 
       {#if error}
-        <div class="text-red-600 text-sm text-center">{error}</div>
+        <div class="text-terminal-error text-sm text-center">{error}</div>
       {/if}
 
       <div>
         <button
           type="submit"
           disabled={loading}
-          class="group relative flex w-full justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+          class="btn-terminal w-full py-2 text-sm disabled:opacity-50"
         >
-          {loading ? '登录中...' : '登录'}
+          {loading ? '...' : 'submit'}
         </button>
       </div>
 
       <div class="text-center">
-        <a href="/" class="text-sm text-gray-600 hover:text-gray-500">
-          返回首页
+        <a href="/" class="text-sm text-terminal-text-muted hover:text-terminal-text-secondary">
+          ← back
         </a>
       </div>
     </form>
