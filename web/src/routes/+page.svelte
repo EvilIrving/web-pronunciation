@@ -120,7 +120,7 @@
     <span class="text-terminal-accent shrink-0">$</span>
     <input 
       type="text" 
-      placeholder="grep ... (搜索技术词汇如: coroutine, cache)" 
+      placeholder="grep ... (搜搜看自己读错美，如: coroutine, cache)" 
       value={searchQuery} 
       oninput={search}
       class="flex-1 min-w-0 bg-transparent border-none outline-none text-terminal-text-primary font-mono caret-terminal-accent placeholder:text-terminal-text-muted py-2"
