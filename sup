@@ -24,10 +24,3 @@ INSERT INTO words (word, ipa, audio_url) VALUES
   ('postgresql', '/ˌpəʊstˈɡres.kjuː.el/', NULL),
   ('vue', '/vjuː/', NULL),
   ('svelte', '/svelt/', NULL);
-  ('boolean', 'common', 'keyword', ARRAY['type'], '/ˈbuː.li.ən/', NULL),
-  
-  -- 框架/库
-  ('kubernetes', 'common', 'tool', ARRAY['container', 'orchestration'], '/ˌkuː.bərˈnet.iːz/', NULL),
-  ('postgresql', 'sql', 'tool', ARRAY['database'], '/ˌpəʊstˈɡres.kjuː.el/', NULL),
-  ('vue', 'javascript', 'framework', ARRAY['frontend', 'ui'], '/vjuː/', NULL),
-  ('svelte', 'javascript', 'framework', ARRAY['frontend', 'ui'], '/svelt/', NULL);

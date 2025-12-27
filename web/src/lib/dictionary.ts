@@ -1,94 +1,89 @@
 /**
  * Dictionary API 服务
- * 使用 Free Dictionary API 获取单词音标和发音
- * https://dictionaryapi.dev/
+ * 调用服务端 API 获取发音信息
+ * - IPA 音标：Moonshot AI（KIMI）
+ * - 音频：MiniMax T2A + R2 存储
  */
-
-// API 返回类型
-interface DictionaryPhonetic {
-  text?: string;
-  audio?: string;
-}
-
-interface DictionaryEntry {
-  word: string;
-  phonetic?: string;
-  phonetics?: DictionaryPhonetic[];
-}
 
 // 发音信息结果
 export interface PronunciationInfo {
-  ipa_uk: string | null;
-  audio_uk_url: string | null;
-  ipa_us: string | null;
-  audio_us_url: string | null;
+    ipa: string | null;
+    audio_url: string | null;
 }
 
 /**
- * 从 Free Dictionary API 获取单词的发音信息
+ * 获取 IPA 音标（通过 Moonshot AI）
+ * @param word 要查询的单词
+ * @returns IPA 音标
+ */
+export async function fetchIPA(word: string): Promise<string | null> {
+    try {
+        const response = await fetch('/api/ipa', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ word }),
+        });
+
+        if (!response.ok) {
+            console.warn(`IPA API: 获取单词 "${word}" 音标失败`);
+            return null;
+        }
+
+        const data = await response.json();
+        return data.ipa || null;
+    } catch (error) {
+        console.error(`获取单词 "${word}" 音标时出错:`, error);
+        return null;
+    }
+}
+
+/**
+ * 生成音频（通过 MiniMax T2A + R2）
+ * @param word 要生成音频的单词
+ * @returns 音频 URL
+ */
+export async function generateAudio(word: string): Promise<string | null> {
+    try {
+        const response = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ word }),
+        });
+
+        if (!response.ok) {
+            console.warn(`TTS API: 生成单词 "${word}" 音频失败`);
+            return null;
+        }
+
+        const data = await response.json();
+        return data.audio_url || null;
+    } catch (error) {
+        console.error(`生成单词 "${word}" 音频时出错:`, error);
+        return null;
+    }
+}
+
+/**
+ * 获取单词的发音信息（IPA 音标 + 音频）
  * @param word 要查询的单词
  * @returns 发音信息，包含音标和音频 URL
  */
 export async function fetchPronunciation(word: string): Promise<PronunciationInfo> {
-  const result: PronunciationInfo = {
-    ipa_uk: null,
-    audio_uk_url: null,
-    ipa_us: null,
-    audio_us_url: null,
-  };
+    const result: PronunciationInfo = {
+        ipa: null,
+        audio_url: null,
+    };
 
-  try {
-    const response = await fetch(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`
-    );
+    // 并行获取 IPA 和音频
+    const [ipa, audio_url] = await Promise.all([
+        fetchIPA(word),
+        generateAudio(word),
+    ]);
 
-    if (!response.ok) {
-      console.warn(`Dictionary API: 未找到单词 "${word}" 的发音信息`);
-      return result;
-    }
-
-    const data: DictionaryEntry[] = await response.json();
-
-    if (!data || data.length === 0) {
-      return result;
-    }
-
-    const entry = data[0];
-
-    // 获取音标和音频
-    // API 返回的 phonetics 数组中可能包含多个发音
-    // 我们优先选择有音频的发音
-    if (entry.phonetics && entry.phonetics.length > 0) {
-      // 查找带有音频的发音条目
-      const phoneticWithAudio = entry.phonetics.find((p) => p.audio && p.audio.trim() !== '');
-
-      if (phoneticWithAudio) {
-        result.ipa_uk = phoneticWithAudio.text || null;
-        // 处理音频 URL，确保是完整的 https URL
-        let audioUrl = phoneticWithAudio.audio || '';
-        if (audioUrl.startsWith('//')) {
-          audioUrl = 'https:' + audioUrl;
-        }
-        result.audio_uk_url = audioUrl || null;
-      } else {
-        // 如果没有带音频的，使用第一个有音标的
-        const phoneticWithText = entry.phonetics.find((p) => p.text && p.text.trim() !== '');
-        if (phoneticWithText) {
-          result.ipa_uk = phoneticWithText.text || null;
-        }
-      }
-    }
-
-    // 如果 phonetics 数组没有结果，使用顶层的 phonetic
-    if (!result.ipa_uk && entry.phonetic) {
-      result.ipa_uk = entry.phonetic;
-    }
+    result.ipa = ipa;
+    result.audio_url = audio_url;
 
     return result;
-  } catch (error) {
-    console.error(`获取单词 "${word}" 发音时出错:`, error);
-    return result;
-  }
 }
 
 /**
@@ -98,25 +93,25 @@ export async function fetchPronunciation(word: string): Promise<PronunciationInf
  * @returns 单词到发音信息的映射
  */
 export async function fetchPronunciationBatch(
-  words: string[],
-  onProgress?: (current: number, total: number, word: string) => void
+    words: string[],
+    onProgress?: (current: number, total: number, word: string) => void
 ): Promise<Map<string, PronunciationInfo>> {
-  const results = new Map<string, PronunciationInfo>();
+    const results = new Map<string, PronunciationInfo>();
 
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i];
-    if (onProgress) {
-      onProgress(i + 1, words.length, word);
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        if (onProgress) {
+            onProgress(i + 1, words.length, word);
+        }
+
+        const pronunciation = await fetchPronunciation(word);
+        results.set(word, pronunciation);
+
+        // 添加小延迟避免请求过快
+        if (i < words.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+        }
     }
 
-    const pronunciation = await fetchPronunciation(word);
-    results.set(word, pronunciation);
-
-    // 添加小延迟避免请求过快
-    if (i < words.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    }
-  }
-
-  return results;
+    return results;
 }

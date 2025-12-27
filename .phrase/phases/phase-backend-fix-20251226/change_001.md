@@ -1,0 +1,29 @@
+# change_001
+
+## 2024-12-26
+
+### task001 - 修复后台添加单词报错问题
+- **Add**: 创建 `web/src/routes/api/words/+server.ts` API 路由
+- **Add**: 实现 GET（获取单词列表）、POST（创建单词）、PUT（更新单词）、DELETE（删除单词）
+- **Modify**: 修改 `web/src/routes/admin/+page.svelte` 调用 SSR API
+
+### task002 - 优化后台管理交互 - 快速输入和播放功能
+- **Modify**: `web/src/routes/admin/+page.svelte`:
+  - 顶部添加快速输入框（输入后按 Enter 保存，去除弹窗）
+  - 表格支持行内编辑（点击编辑按钮变输入框）
+  - 新增播放按钮列（有 audio_url 才显示）
+  - 保留批量导入功能
+
+### task003 - 音频改用 MiniMax T2A 生成
+- **Modify**: `web/src/lib/dictionary.ts`:
+  - 移除 `api.dictionaryapi.dev` 调用
+  - 新增 `fetchIPA()` 调用 Moonshot AI API
+  - 新增 `generateAudio()` 调用 MiniMax T2A API
+- **Add**: 创建 `web/src/routes/api/tts/+server.ts` - MiniMax T2A 音频生成 API
+- **Add**: 创建 `web/src/routes/api/ipa/+server.ts` - Moonshot AI IPA 生成 API
+
+### task004 - 编辑时支持生成音频
+- **Modify**: `web/src/routes/admin/+page.svelte`:
+  - 新增 `editGeneratingAudio` 状态
+  - 新增 `generateAudioForEdit()` 函数
+  - 编辑模式添加"🎵"按钮生成音频
