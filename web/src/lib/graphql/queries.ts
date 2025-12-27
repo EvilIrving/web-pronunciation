@@ -97,7 +97,7 @@ export async function deleteWord(id: string) {
 export async function searchWords(query: string, limit = 10) {
   const { data, error } = await supabase
     .from('words')
-    .select('id, word, ipa, audio_url')
+    .select('id, word, ipa_us, audio_url_us')
     .ilike('word', `%${query}%`)
     .limit(limit)
 

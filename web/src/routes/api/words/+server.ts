@@ -8,8 +8,8 @@ const supabase = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 interface WordInsert {
   word: string;
-  ipa?: string | null;
-  audio_url?: string | null;
+  ipa_us?: string | null;
+  audio_url_us?: string | null;
   ipa_uk?: string | null;
   audio_url_uk?: string | null;
 }

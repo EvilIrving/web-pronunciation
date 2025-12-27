@@ -1,4 +1,5 @@
 import { MINIMAX_API_KEY } from '$env/static/private';
+import { fetchAudio as fetchYoudao } from './youdao/client';
 
 const FRDIC_URL = 'https://api.frdic.com/api/v2/speech/speakweb';
 const MINIMAX_URL = 'https://api.minimaxi.com/v1/t2a_v2';
@@ -54,8 +55,10 @@ export async function fetchMinimax(text: string): Promise<Uint8Array> {
   return hexToBytes(data.data.audio);
 }
 
-export type Provider = 'frdic' | 'minimax';
+export type Provider = 'youdao' | 'frdic' | 'minimax';
 
-export async function fetchAudio(word: string, accent = 'us', provider: Provider = 'frdic', encodedTxt?: string): Promise<Uint8Array> {
-  return provider === 'frdic' ? fetchFrdic(word, accent, encodedTxt) : fetchMinimax(word);
+export async function fetchAudio(word: string, accent = 'us', provider: Provider = 'youdao', encodedTxt?: string): Promise<Uint8Array> {
+  if (provider === 'youdao') return fetchYoudao(word, accent as 'us' | 'uk');
+  if (provider === 'minimax') return fetchMinimax(word);
+  return fetchFrdic(word, accent, encodedTxt);
 }

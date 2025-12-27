@@ -19,16 +19,16 @@ export const POST: RequestHandler = async ({ request }) => {
     const { word, mode, accent, provider, txt } = await request.json();
     if (!word) return json({ error: 'word required' }, { status: 400 });
 
-    const p: Provider = provider === 'minimax' ? 'minimax' : 'frdic';
+    const p: Provider = ['youdao', 'frdic', 'minimax'].includes(provider) ? provider as Provider : 'youdao';
 
     if (mode === 'both') {
       const r = await genBoth(word, p, txt);
-      return json({ success: true, audio_url: r.us.url, audio_url_uk: r.uk.url, audio_size: r.us.size, audio_size_uk: r.uk.size, mode: 'both', provider: p });
+      return json({ success: true, audio_url_us: r.us.url, audio_url_uk: r.uk.url, audio_size_us: r.us.size, audio_size_uk: r.uk.size, mode: 'both', provider: p });
     }
 
     const acc = accent === 'uk' ? 'uk' : 'us';
     const r = await gen(word, acc, p, txt);
-    return json({ success: true, audio_url: r.url, audio_size: r.size, accent: acc, provider: p, mode: 'single' });
+    return json({ success: true, audio_url_us: r.url, audio_size_us: r.size, accent: acc, provider: p, mode: 'single' });
   } catch (e) {
     console.error('[TTS]', e);
     return json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });

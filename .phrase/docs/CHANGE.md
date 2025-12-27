@@ -4,6 +4,10 @@
 
 ---
 
+## phase-eudic-crawler-20251227 (2025-12-27)
+- `change_002` - 字段重命名：ipa/audio_url → ipa_us/audio_url_us ([链接](../phases/phase-eudic-crawler-20251227/change_002.md))
+  - **Refactor** (2025-12-27) - 字段命名统一：将 `ipa` 改为 `ipa_us`，`audio_url` 改为 `audio_url_us`，与英音字段 `ipa_uk`/`audio_url_uk` 保持一致的命名规范
+
 ## phase-backend-fix-20251226 (2025-12-26)
 - `change_001` - 修复后台添加单词权限问题、后台交互优化、音频改用真人发音、编辑时支持生成音频 ([链接](../phases/phase-backend-fix-20251226/change_001.md))
   - **task005** (2025-12-27) - 后台交互优化：音频重生成按钮独立，一键生成并自动保存

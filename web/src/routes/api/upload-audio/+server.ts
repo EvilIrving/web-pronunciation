@@ -25,7 +25,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
       const { data, type } = await fetchUrl(url);
       const audioUrl = await upload(data, genFilename(word || 'audio', 'custom', getExt(type)), type);
-      return json({ success: true, audio_url: audioUrl, size: data.length, source: 'url' });
+      return json({ success: true, audio_url_us: audioUrl, size: data.length, source: 'url' });
     }
 
     const form = await request.formData();
@@ -38,7 +38,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
     const data = new Uint8Array(await file.arrayBuffer());
     const audioUrl = await upload(data, genFilename(word || 'audio', 'custom', getExt(file.type)), file.type);
-    return json({ success: true, audio_url: audioUrl, original_name: file.name, size: file.size, source: 'file' });
+    return json({ success: true, audio_url_us: audioUrl, original_name: file.name, size: file.size, source: 'file' });
   } catch (e) {
     console.error('[Upload]', e);
     return json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });

@@ -2,8 +2,8 @@ export interface Word {
   id: string;
   word: string;
   normalized: string;
-  ipa: string | null;
-  audio_url: string | null;
+  ipa_us: string | null;
+  audio_url_us: string | null;
   ipa_uk: string | null;
   audio_url_uk: string | null;
   created_at: string;
@@ -12,16 +12,16 @@ export interface Word {
 
 export interface WordInsert {
   word: string;
-  ipa?: string | null;
-  audio_url?: string | null;
+  ipa_us?: string | null;
+  audio_url_us?: string | null;
   ipa_uk?: string | null;
   audio_url_uk?: string | null;
 }
 
 export interface WordUpdate {
   word?: string;
-  ipa?: string | null;
-  audio_url?: string | null;
+  ipa_us?: string | null;
+  audio_url_us?: string | null;
   ipa_uk?: string | null;
   audio_url_uk?: string | null;
 }

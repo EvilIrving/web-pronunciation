@@ -50,7 +50,7 @@
   }
 
   function play(word: Word, accent: Accent) {
-    const url = accent === 'us' ? word.audio_url : word.audio_url_uk;
+    const url = accent === 'us' ? word.audio_url_us : word.audio_url_uk;
     if (!url) return;
 
     audio?.pause();
@@ -76,8 +76,8 @@
 
 {#snippet ipa(word: Word, accent: Accent)}
   {@const isUs = accent === 'us'}
-  {@const ipaText = isUs ? word.ipa : word.ipa_uk}
-  {@const hasAudio = isUs ? word.audio_url : word.audio_url_uk}
+  {@const ipaText = isUs ? word.ipa_us : word.ipa_uk}
+  {@const hasAudio = isUs ? word.audio_url_us : word.audio_url_uk}
   {@const active = isPlaying(word, accent)}
   {#if ipaText}
     {#if hasAudio}

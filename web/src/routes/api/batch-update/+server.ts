@@ -31,7 +31,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const taskId = randomUUID();
     await supabase.from('batch_update_tasks').insert({ id: taskId, status: 'processing', total_words: wordIds.length, processed_words: 0, failed_words: 0, started_at: new Date().toISOString() });
 
-    const { data: words } = await supabase.from('words').select('id, normalized, audio_url, audio_url_uk').in('id', wordIds);
+    const { data: words } = await supabase.from('words').select('id, normalized, audio_url_us, audio_url_uk').in('id', wordIds);
     if (!words) return json({ error: 'fetch failed' }, { status: 500 });
 
     const accents = audioMode === 'both' ? ['us', 'uk'] : audioMode === 'uk' ? ['uk'] : ['us'];
@@ -47,7 +47,7 @@ export const POST: RequestHandler = async ({ request }) => {
         }
         if (updateAudio) {
           for (const acc of accents) {
-            const key = acc === 'us' ? 'audio_url' : 'audio_url_uk';
+            const key = acc === 'us' ? 'audio_url_us' : 'audio_url_uk';
             if (!w[key]) {
               try { updates[key] = await genAudio(w.normalized, acc); } catch {}
             }

@@ -7,8 +7,8 @@
 
 // 发音信息结果
 export interface PronunciationInfo {
-    ipa: string | null;
-    audio_url: string | null;
+    ipa_us: string | null;
+    audio_url_us: string | null;
 }
 
 /**
@@ -30,7 +30,7 @@ export async function fetchIPA(word: string): Promise<string | null> {
         }
 
         const data = await response.json();
-        return data.ipa || null;
+        return data.ipa_us || null;
     } catch (error) {
         console.error(`获取单词 "${word}" 音标时出错:`, error);
         return null;
@@ -56,7 +56,7 @@ export async function generateAudio(word: string): Promise<string | null> {
         }
 
         const data = await response.json();
-        return data.audio_url || null;
+        return data.audio_url_us || null;
     } catch (error) {
         console.error(`生成单词 "${word}" 音频时出错:`, error);
         return null;
@@ -70,18 +70,18 @@ export async function generateAudio(word: string): Promise<string | null> {
  */
 export async function fetchPronunciation(word: string): Promise<PronunciationInfo> {
     const result: PronunciationInfo = {
-        ipa: null,
-        audio_url: null,
+        ipa_us: null,
+        audio_url_us: null,
     };
 
     // 并行获取 IPA 和音频
-    const [ipa, audio_url] = await Promise.all([
+    const [ipa_us, audio_url_us] = await Promise.all([
         fetchIPA(word),
         generateAudio(word),
     ]);
 
-    result.ipa = ipa;
-    result.audio_url = audio_url;
+    result.ipa_us = ipa_us;
+    result.audio_url_us = audio_url_us;
 
     return result;
 }

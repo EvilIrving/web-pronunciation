@@ -59,7 +59,7 @@
   }
 
   function tempWord(word: string): Word {
-    return { id: `temp-${Date.now()}`, word, ipa: null, audio_url: null, ipa_uk: null, audio_url_uk: null, normalized: word.toLowerCase(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    return { id: `temp-${Date.now()}`, word, ipa_us: null, audio_url_us: null, ipa_uk: null, audio_url_uk: null, normalized: word.toLowerCase(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
   }
 
   async function add() {
@@ -68,9 +68,9 @@
     const temp = tempWord(w); words = [temp, ...words];
     toast.show(`adding "${w}"...`, 'info');
     try {
-      const ipa = await api.fetchEudic(w).catch(() => ({ ipa_us: '', ipa_uk: '' }));
-      const tts = await api.fetchTTS(w).catch(() => ({ audio_url: '', audio_url_uk: '' }));
-      const res = await api.addWord({ word: w, ipa: ipa.ipa_us || ipa.ipa_uk, ipa_uk: ipa.ipa_uk, audio_url: tts.audio_url, audio_url_uk: tts.audio_url_uk });
+      const ipa = await api.fetchPhonetics(w).catch(() => ({ ipa_us: '', ipa_uk: '' }));
+      const tts = await api.fetchTTS(w).catch(() => ({ audio_url_us: '', audio_url_uk: '' }));
+      const res = await api.addWord({ word: w, ipa_us: ipa.ipa_us || ipa.ipa_uk, ipa_uk: ipa.ipa_uk, audio_url_us: tts.audio_url_us, audio_url_uk: tts.audio_url_uk });
       if (res.error) throw new Error(res.error);
       words = words.map(x => x.id === temp.id ? { ...x, ...res.data } : x);
       toast.show(`added "${w}"`, 'success');
@@ -80,13 +80,13 @@
 
   async function refresh(w: Word) {
     refreshing = w.id; const orig = { ...w };
-    words = words.map(x => x.id === w.id ? { ...x, ipa: '', ipa_uk: '', audio_url: '', audio_url_uk: '' } : x);
+    words = words.map(x => x.id === w.id ? { ...x, ipa_us: '', ipa_uk: '', audio_url_us: '', audio_url_uk: '' } : x);
     toast.show(`refreshing "${w.word}"...`, 'info');
     try {
-      const ipa = await api.fetchEudic(w.word).catch(() => ({ ipa_us: '', ipa_uk: '' }));
-      const tts = await api.fetchTTS(w.word).catch(() => ({ audio_url: '', audio_url_uk: '' }));
-      if (!ipa.ipa_us && !ipa.ipa_uk && !tts.audio_url) { words = words.map(x => x.id === w.id ? orig : x); toast.show('failed', 'error'); refreshing = null; return; }
-      const res = await api.updateWord({ id: w.id, ipa: ipa.ipa_us || ipa.ipa_uk, ipa_uk: ipa.ipa_uk, audio_url: tts.audio_url, audio_url_uk: tts.audio_url_uk });
+      const ipa = await api.fetchPhonetics(w.word).catch(() => ({ ipa_us: '', ipa_uk: '' }));
+      const tts = await api.fetchTTS(w.word).catch(() => ({ audio_url_us: '', audio_url_uk: '' }));
+      if (!ipa.ipa_us && !ipa.ipa_uk && !tts.audio_url_us) { words = words.map(x => x.id === w.id ? orig : x); toast.show('failed', 'error'); refreshing = null; return; }
+      const res = await api.updateWord({ id: w.id, ipa_us: ipa.ipa_us || ipa.ipa_uk, ipa_uk: ipa.ipa_uk, audio_url_us: tts.audio_url_us, audio_url_uk: tts.audio_url_uk });
       if (res.error) throw new Error(res.error);
       words = words.map(x => x.id === w.id ? { ...x, ...res.data } : x);
       toast.show(`refreshed "${w.word}"`, 'success');
@@ -99,7 +99,7 @@
     api.deleteWord(w.id).catch(() => { words = [...words, w]; toast.show('rm failed', 'error'); });
   }
 
-  function play(w: Word, acc: Accent) { player.play(w.id, acc, acc === 'us' ? w.audio_url : w.audio_url_uk); }
+  function play(w: Word, acc: Accent) { player.play(w.id, acc, acc === 'us' ? w.audio_url_us : w.audio_url_uk); }
 
   async function importBatch() {
     const lines = batch.text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -112,9 +112,9 @@
       const w = lines[i], id = temps[i].id;
       batch.progress = { cur: i + 1, total: lines.length, word: w };
       try {
-        const ipa = await api.fetchEudic(w).catch(() => ({ ipa_us: '', ipa_uk: '' }));
-        const tts = await api.fetchTTS(w).catch(() => ({ audio_url: '', audio_url_uk: '' }));
-        const res = await api.addWord({ word: w, ipa: ipa.ipa_us || ipa.ipa_uk, ipa_uk: ipa.ipa_uk, audio_url: tts.audio_url, audio_url_uk: tts.audio_url_uk });
+        const ipa = await api.fetchPhonetics(w).catch(() => ({ ipa_us: '', ipa_uk: '' }));
+        const tts = await api.fetchTTS(w).catch(() => ({ audio_url_us: '', audio_url_uk: '' }));
+        const res = await api.addWord({ word: w, ipa_us: ipa.ipa_us || ipa.ipa_uk, ipa_uk: ipa.ipa_uk, audio_url_us: tts.audio_url_us, audio_url_uk: tts.audio_url_uk });
         if (res.error) { failed.push(`${w}: ${res.error}`); words = words.filter(x => x.id !== id); }
         else { ok++; words = words.map(x => x.id === id ? { ...x, ...res.data } : x); }
       } catch (e) { failed.push(`${w}: ${e instanceof Error ? e.message : 'err'}`); words = words.filter(x => x.id !== id); }
@@ -129,29 +129,29 @@
     const url = upload.url.trim();
     try { new URL(url); } catch { upload.err = 'invalid url'; return; }
     if (!upload.word) return;
-    const { id, word } = upload.word, orig = upload.word.audio_url;
-    upload.show = false; words = words.map(x => x.id === id ? { ...x, audio_url: '' } : x);
+    const { id, word } = upload.word, orig = upload.word.audio_url_us;
+    upload.show = false; words = words.map(x => x.id === id ? { ...x, audio_url_us: '' } : x);
     toast.show(`uploading...`, 'info');
     try {
-      const { audio_url } = await api.uploadAudio({ url, word });
-      await api.updateWord({ id, audio_url });
-      words = words.map(x => x.id === id ? { ...x, audio_url } : x);
+      const { audio_url_us } = await api.uploadAudio({ url, word });
+      await api.updateWord({ id, audio_url_us });
+      words = words.map(x => x.id === id ? { ...x, audio_url_us } : x);
       toast.show('uploaded', 'success');
-    } catch (e) { words = words.map(x => x.id === id ? { ...x, audio_url: orig } : x); toast.show(e instanceof Error ? e.message : 'failed', 'error'); }
+    } catch (e) { words = words.map(x => x.id === id ? { ...x, audio_url_us: orig } : x); toast.show(e instanceof Error ? e.message : 'failed', 'error'); }
   }
 
   async function handleFile(e: Event) {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file || !upload.word) return;
-    const { id, word } = upload.word, orig = upload.word.audio_url;
-    upload.show = false; words = words.map(x => x.id === id ? { ...x, audio_url: '' } : x);
+    const { id, word } = upload.word, orig = upload.word.audio_url_us;
+    upload.show = false; words = words.map(x => x.id === id ? { ...x, audio_url_us: '' } : x);
     toast.show('uploading...', 'info');
     try {
-      const { audio_url } = await api.uploadAudio({ file, word });
-      await api.updateWord({ id, audio_url });
-      words = words.map(x => x.id === id ? { ...x, audio_url } : x);
+      const { audio_url_us } = await api.uploadAudio({ file, word });
+      await api.updateWord({ id, audio_url_us });
+      words = words.map(x => x.id === id ? { ...x, audio_url_us } : x);
       toast.show('uploaded', 'success');
-    } catch (e) { words = words.map(x => x.id === id ? { ...x, audio_url: orig } : x); toast.show(e instanceof Error ? e.message : 'failed', 'error'); }
+    } catch (e) { words = words.map(x => x.id === id ? { ...x, audio_url_us: orig } : x); toast.show(e instanceof Error ? e.message : 'failed', 'error'); }
     if (fileRef) fileRef.value = '';
   }
 </script>
@@ -167,8 +167,8 @@
 {/snippet}
 
 {#snippet ipa(w: Word, acc: Accent)}
-  {@const txt = acc === 'us' ? w.ipa : w.ipa_uk}
-  {@const url = acc === 'us' ? w.audio_url : w.audio_url_uk}
+  {@const txt = acc === 'us' ? w.ipa_us : w.ipa_uk}
+  {@const url = acc === 'us' ? w.audio_url_us : w.audio_url_uk}
   {@const active = player.isPlaying(w.id, acc)}
   {@const color = acc === 'us' ? 'text-terminal-info' : 'text-terminal-accent'}
   {#if txt}

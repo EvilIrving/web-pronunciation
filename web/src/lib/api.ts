@@ -14,9 +14,9 @@ export async function getWords(opts: { search?: string; limit?: number; offset?:
 
 export async function addWord(data: {
   word: string;
-  ipa?: string;
+  ipa_us?: string;
   ipa_uk?: string;
-  audio_url?: string;
+  audio_url_us?: string;
   audio_url_uk?: string;
 }) {
   const res = await fetch('/api/words', {
@@ -48,14 +48,18 @@ export async function fetchIPA(word: string, provider: string) {
   });
   const json = await res.json();
   if (!res.ok || !json.success) throw new Error(json.error || 'IPA failed');
-  return { ipa: json.ipa || '', ipa_uk: json.ipa_uk || '' };
+  return { ipa_us: json.ipa_us || '', ipa_uk: json.ipa_uk || '' };
+}
+
+export async function fetchPhonetics(word: string, provider: 'youdao' | 'eudic' = 'youdao') {
+  const res = await fetch(`/api/phonetics?word=${encodeURIComponent(word)}&provider=${provider}`);
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json.error || 'Phonetics failed');
+  return { ipa_us: json.ipa_us || '', ipa_uk: json.ipa_uk || '' };
 }
 
 export async function fetchEudic(word: string) {
-  const res = await fetch(`/api/eudic?word=${encodeURIComponent(word)}`);
-  const json = await res.json();
-  if (!res.ok || !json.success) throw new Error(json.error || 'Eudic failed');
-  return { ipa_us: json.ipa_us || '', ipa_uk: json.ipa_uk || '' };
+  return fetchPhonetics(word, 'eudic');
 }
 
 export async function fetchTTS(word: string, mode: 'single' | 'both' = 'both', accent: Accent = 'us') {
@@ -66,7 +70,7 @@ export async function fetchTTS(word: string, mode: 'single' | 'both' = 'both', a
   });
   const json = await res.json();
   if (!res.ok) throw new Error('TTS failed');
-  return { audio_url: json.audio_url || '', audio_url_uk: json.audio_url_uk || '' };
+  return { audio_url_us: json.audio_url_us || '', audio_url_uk: json.audio_url_uk || '' };
 }
 
 export async function uploadAudio(opts: { url?: string; file?: File; word: string }) {
@@ -87,7 +91,7 @@ export async function uploadAudio(opts: { url?: string; file?: File; word: strin
   }
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || 'upload failed');
-  return { audio_url: json.audio_url };
+  return { audio_url_us: json.audio_url_us };
 }
 
 export async function getModels() {

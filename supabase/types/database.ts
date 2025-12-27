@@ -15,8 +15,8 @@ export interface Word {
   word: string;
   normalized: string;
   // 美音字段
-  ipa: string | null;
-  audio_url: string | null;
+  ipa_us: string | null;
+  audio_url_us: string | null;
   // 英音字段
   ipa_uk: string | null;
   audio_url_uk: string | null;
@@ -27,8 +27,8 @@ export interface Word {
 // 创建词汇时的输入类型（省略自动生成的字段）
 export interface WordInsert {
   word: string;
-  ipa?: string | null;
-  audio_url?: string | null;
+  ipa_us?: string | null;
+  audio_url_us?: string | null;
   ipa_uk?: string | null;
   audio_url_uk?: string | null;
 }
@@ -36,8 +36,8 @@ export interface WordInsert {
 // 更新词汇时的输入类型（所有字段可选）
 export interface WordUpdate {
   word?: string;
-  ipa?: string | null;
-  audio_url?: string | null;
+  ipa_us?: string | null;
+  audio_url_us?: string | null;
   ipa_uk?: string | null;
   audio_url_uk?: string | null;
 }

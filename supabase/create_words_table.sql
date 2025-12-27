@@ -11,9 +11,9 @@ CREATE TABLE words (
   word TEXT NOT NULL,                              -- 原始词形，如 "coroutine"
   normalized TEXT NOT NULL,                        -- 标准化形式，用于搜索去重，小写无空格
   
-  -- 发音信息（通用音标，不区分英美音）
-  ipa TEXT,                                        -- IPA 音标
-  audio_url TEXT,                                  -- 发音音频 URL (Cloudflare R2)
+  -- 发音信息（美式发音）
+  ipa_us TEXT,                                      -- IPA 音标（美式）
+  audio_url_us TEXT,                                -- 发音音频 URL (Cloudflare R2, 美式)
   
   -- 时间戳
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -90,7 +90,7 @@ CREATE POLICY "words_authenticated_write" ON words
 COMMENT ON TABLE words IS '技术词汇发音索引表';
 COMMENT ON COLUMN words.word IS '原始词形，保留原始大小写';
 COMMENT ON COLUMN words.normalized IS '标准化形式，小写，用于搜索和去重';
-COMMENT ON COLUMN words.ipa IS 'IPA 国际音标（通用音，不区分英美音）';
-COMMENT ON COLUMN words.audio_url IS '发音音频URL';
+COMMENT ON COLUMN words.ipa_us IS 'IPA 国际音标（美式发音）';
+COMMENT ON COLUMN words.audio_url_us IS '发音音频URL（美式）';
 COMMENT ON COLUMN words.created_at IS '创建时间';
 COMMENT ON COLUMN words.updated_at IS '更新时间';
