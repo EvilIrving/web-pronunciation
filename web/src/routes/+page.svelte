@@ -6,7 +6,7 @@
   let words = $state<Word[]>([]);
   let searchQuery = $state('');
   let isLoading = $state(false);
-  let isInitialized = $state(false); // 首次加载完成标记
+  let isInitialized = $state(false);
   let hasMore = $state(true);
   let offset = $state(0);
   let total = $state(0);
@@ -14,12 +14,12 @@
   let playingWordId = $state<string | null>(null);
 
   // 虚拟列表状态
-  let visibleItems = $state<Set<number>>(new Set());
+  const ITEM_HEIGHT = 80; // 单个项目高度（含 gap 12px）
+  const ITEM_CONTENT_HEIGHT = 68; // 实际内容高度
+  const BUFFER_COUNT = 6;
   let containerRef = $state<HTMLElement | null>(null);
-  let itemRefs = $state<Map<number, HTMLElement>>(new Map());
-  let observer: IntersectionObserver | null = null;
-  const BUFFER_SIZE = 4; // 可见区域外额外渲染的行数
-  const ITEM_HEIGHT = 76; // 预估单个项目高度（含 gap）
+  let scrollTop = $state(0);
+  let containerHeight = $state(600);
 
   const LIMIT = 20;
   let searchTimeout: ReturnType<typeof setTimeout>;
@@ -110,176 +110,91 @@
     };
   }
 
-  // 计算每行的列数（响应式）
-  function getColumnsCount(): number {
-    if (typeof window === 'undefined') return 2;
-    return window.innerWidth >= 640 ? 2 : 1; // sm breakpoint
-  }
-
-  // 根据索引计算行号
-  function getRowIndex(index: number): number {
-    return Math.floor(index / getColumnsCount());
-  }
-
-  // 检查某个索引的项是否应该渲染
-  function shouldRenderItem(index: number): boolean {
-    if (visibleItems.size === 0) return true; // 初始状态全部渲染
-    
-    const rowIndex = getRowIndex(index);
-    const cols = getColumnsCount();
-    
-    // 检查该行或相邻行是否有可见项
-    for (let row = rowIndex - BUFFER_SIZE; row <= rowIndex + BUFFER_SIZE; row++) {
-      for (let col = 0; col < cols; col++) {
-        const checkIndex = row * cols + col;
-        if (visibleItems.has(checkIndex)) {
-          return true;
-        }
-      }
+  // 计算列数
+  let columns = $state(2);
+  
+  function updateColumns() {
+    if (typeof window !== 'undefined') {
+      columns = window.innerWidth >= 640 ? 2 : 1;
     }
-    return false;
   }
 
-  // 设置 IntersectionObserver
-  function setupObserver() {
-    if (observer) {
-      observer.disconnect();
-    }
-
-    observer = new IntersectionObserver(
-      (entries) => {
-        let changed = false;
-        entries.forEach((entry) => {
-          const index = parseInt(entry.target.getAttribute('data-index') || '-1');
-          if (index === -1) return;
-
-          if (entry.isIntersecting) {
-            if (!visibleItems.has(index)) {
-              visibleItems.add(index);
-              changed = true;
-            }
-          } else {
-            if (visibleItems.has(index)) {
-              visibleItems.delete(index);
-              changed = true;
-            }
-          }
+  // 计算行数
+  let rowCount = $derived(Math.ceil(words.length / columns));
+  
+  // 计算总高度
+  let totalHeight = $derived(rowCount * ITEM_HEIGHT);
+  
+  // 计算可见范围
+  let visibleRange = $derived.by(() => {
+    const startRow = Math.floor(scrollTop / ITEM_HEIGHT);
+    const visibleRows = Math.ceil(containerHeight / ITEM_HEIGHT);
+    
+    const startIndex = Math.max(0, (startRow - BUFFER_COUNT) * columns);
+    const endIndex = Math.min(words.length, (startRow + visibleRows + BUFFER_COUNT) * columns);
+    
+    return { startIndex, endIndex };
+  });
+  
+  // 可见项目列表
+  let visibleItems = $derived.by(() => {
+    const items: { word: Word; index: number; top: number; left: string }[] = [];
+    const { startIndex, endIndex } = visibleRange;
+    
+    for (let i = startIndex; i < endIndex; i++) {
+      if (words[i]) {
+        const row = Math.floor(i / columns);
+        const col = i % columns;
+        items.push({
+          word: words[i],
+          index: i,
+          top: row * ITEM_HEIGHT,
+          left: columns === 1 ? '0' : col === 0 ? '0' : '50%'
         });
-        
-        if (changed) {
-          visibleItems = new Set(visibleItems); // 触发响应式更新
-        }
-      },
-      {
-        root: containerRef,
-        rootMargin: `${ITEM_HEIGHT * BUFFER_SIZE}px 0px`, // 提前加载缓冲区
-        threshold: 0
       }
-    );
+    }
+    return items;
+  });
 
-    // 观察所有已注册的元素
-    itemRefs.forEach((el) => {
-      observer?.observe(el);
-    });
-  }
-
-  // 注册项目元素的 action
-  function observeItem(node: HTMLElement, index: number) {
-    itemRefs.set(index, node);
-    node.setAttribute('data-index', index.toString());
+  // 处理滚动
+  function handleScroll(event: Event) {
+    const target = event.target as HTMLElement;
+    scrollTop = target.scrollTop;
     
-    if (observer) {
-      observer.observe(node);
+    // 检查是否需要加载更多
+    const { scrollHeight, clientHeight } = target;
+    if (scrollHeight - scrollTop - clientHeight < 200 && !isLoading && hasMore) {
+      loadWords();
     }
-
-    return {
-      destroy() {
-        itemRefs.delete(index);
-        if (observer) {
-          observer.unobserve(node);
-        }
-      }
-    };
   }
 
-  // 加载更多检测（使用 IntersectionObserver）
-  let loadMoreRef = $state<HTMLElement | null>(null);
-  let loadMoreObserver: IntersectionObserver | null = null;
-
-  function setupLoadMoreObserver() {
-    if (loadMoreObserver) {
-      loadMoreObserver.disconnect();
-    }
-
-    if (!loadMoreRef || !containerRef) return;
-
-    loadMoreObserver = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && !isLoading && hasMore) {
-          loadWords();
-        }
-      },
-      {
-        root: containerRef,
-        rootMargin: '200px',
-        threshold: 0
-      }
-    );
-
-    loadMoreObserver.observe(loadMoreRef);
-  }
-
-  // 容器 ref action
+  // 容器 action
   function containerAction(node: HTMLElement) {
     containerRef = node;
-    setupObserver();
+    containerHeight = node.clientHeight;
     
-    // 监听 resize 重新计算
+    // 使用 IntersectionObserver 检测容器尺寸变化
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        containerHeight = entry.contentRect.height;
+      }
+    });
+    resizeObserver.observe(node);
+    
+    // 监听窗口 resize 更新列数
     const resizeHandler = () => {
-      visibleItems = new Set(); // 重置，让所有项重新计算
-      setupObserver();
+      updateColumns();
     };
     window.addEventListener('resize', resizeHandler);
+    updateColumns();
 
     return {
       destroy() {
+        resizeObserver.disconnect();
         window.removeEventListener('resize', resizeHandler);
-        if (observer) {
-          observer.disconnect();
-          observer = null;
-        }
-        if (loadMoreObserver) {
-          loadMoreObserver.disconnect();
-          loadMoreObserver = null;
-        }
       }
     };
   }
-
-  // loadMore ref action
-  function loadMoreAction(node: HTMLElement) {
-    loadMoreRef = node;
-    setupLoadMoreObserver();
-
-    return {
-      destroy() {
-        if (loadMoreObserver) {
-          loadMoreObserver.disconnect();
-        }
-      }
-    };
-  }
-
-  // 当 words 变化时重新设置 observer
-  $effect(() => {
-    if (words.length > 0 && containerRef) {
-      // 延迟执行，确保 DOM 已更新
-      requestAnimationFrame(() => {
-        setupObserver();
-        setupLoadMoreObserver();
-      });
-    }
-  });
 
   // 初始加载
   onMount(() => {
@@ -328,6 +243,7 @@
   <main 
     class="max-w-4xl mx-auto px-4 py-6 h-[calc(100vh-120px)] overflow-y-auto"
     use:containerAction
+    onscroll={handleScroll}
   >
     {#if !isInitialized}
       <!-- 初始加载中 -->
@@ -354,69 +270,64 @@
         </p>
       </div>
     {:else}
-      <!-- 双列自适应虚拟列表布局 -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {#each words as word, index (word.id)}
-          <div 
-            use:observeItem={index}
-            class="min-h-[64px]"
+      <!-- 虚拟列表容器 -->
+      <div 
+        class="relative"
+        style="height: {totalHeight}px;"
+      >
+        {#each visibleItems as { word, index, top, left } (word.id)}
+          <div
+            class="absolute"
+            style="top: {top}px; left: {left}; width: {columns === 1 ? '100%' : '50%'}; height: {ITEM_HEIGHT}px; padding: 0 6px 12px;"
           >
-            {#if shouldRenderItem(index)}
-              <button
-                onclick={() => playAudio(word)}
-                disabled={!word.audio_url}
-                class="w-full group relative flex items-center gap-4 p-4 bg-white rounded-2xl 
-                       border border-slate-200 shadow-sm
-                       hover:shadow-md hover:border-blue-300 hover:bg-blue-50/30
-                       disabled:opacity-50 disabled:cursor-not-allowed
-                       transition-all duration-200 text-left"
-              >
-                <!-- 播放图标 -->
-                <div class="shrink-0 w-12 h-12 flex items-center justify-center rounded-xl
-                            {word.audio_url ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white cursor-pointer' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}
-                            transition-transform duration-200 group-hover:scale-105">
-                  {#if playingWordId === word.id}
-                    <!-- 播放中动画 -->
-                    <div class="flex items-end gap-0.5 h-5">
-                      <span class="w-1 bg-white rounded-full animate-bounce" style="height: 40%; animation-delay: 0ms;"></span>
-                      <span class="w-1 bg-white rounded-full animate-bounce" style="height: 70%; animation-delay: 150ms;"></span>
-                      <span class="w-1 bg-white rounded-full animate-bounce" style="height: 50%; animation-delay: 300ms;"></span>
-                      <span class="w-1 bg-white rounded-full animate-bounce" style="height: 80%; animation-delay: 450ms;"></span>
-                    </div>
-                  {:else if word.audio_url}
-                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z"/>
-                    </svg>
-                  {:else}
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                    </svg>
-                  {/if}
-                </div>
+            <button
+              onclick={() => playAudio(word)}
+              disabled={!word.audio_url}
+              class="w-full h-full group relative flex items-center gap-4 p-4 bg-white rounded-2xl 
+                     border border-slate-200 shadow-sm
+                     hover:shadow-md hover:border-blue-300 hover:bg-blue-50/30
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     transition-all duration-200 text-left"
+            >
+              <!-- 播放图标 -->
+              <div class="shrink-0 w-12 h-12 flex items-center justify-center rounded-xl
+                          {word.audio_url ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white cursor-pointer' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}
+                          transition-transform duration-200 group-hover:scale-105">
+                {#if playingWordId === word.id}
+                  <!-- 播放中动画 -->
+                  <div class="flex items-end gap-0.5 h-5">
+                    <span class="w-1 bg-white rounded-full animate-bounce" style="height: 40%; animation-delay: 0ms;"></span>
+                    <span class="w-1 bg-white rounded-full animate-bounce" style="height: 70%; animation-delay: 150ms;"></span>
+                    <span class="w-1 bg-white rounded-full animate-bounce" style="height: 50%; animation-delay: 300ms;"></span>
+                    <span class="w-1 bg-white rounded-full animate-bounce" style="height: 80%; animation-delay: 450ms;"></span>
+                  </div>
+                {:else if word.audio_url}
+                  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                {:else}
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                  </svg>
+                {/if}
+              </div>
 
-                <!-- 单词信息 -->
-                <div class="flex-1 min-w-0 flex items-baseline gap-2">
-                  <span class="text-lg font-semibold text-slate-800">
-                    {word.word}
+              <!-- 单词信息 -->
+              <div class="flex-1 min-w-0 flex items-baseline gap-2">
+                <span class="text-lg font-semibold text-slate-800">
+                  {word.word}
+                </span>
+                {#if word.ipa}
+                  <span class="text-sm text-slate-400 font-mono truncate">
+                    /{word.ipa}/
                   </span>
-                  {#if word.ipa}
-                    <span class="text-sm text-slate-400 font-mono truncate">
-                      /{word.ipa}/
-                    </span>
-                  {/if}
-                </div>
-              </button>
-            {:else}
-              <!-- 占位符保持高度 -->
-              <div class="w-full h-[64px] bg-slate-50 rounded-2xl"></div>
-            {/if}
+                {/if}
+              </div>
+            </button>
           </div>
         {/each}
       </div>
-
-      <!-- 加载更多触发器 -->
-      <div use:loadMoreAction class="h-1"></div>
 
       <!-- 加载更多状态 -->
       {#if isLoading}

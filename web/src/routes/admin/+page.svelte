@@ -42,6 +42,13 @@
   // 音频重新生成状态（按行跟踪）
   let regeneratingAudioId = $state<string | null>(null);
 
+  // 音频上传状态（按行跟踪）
+  let uploadingAudioId = $state<string | null>(null);
+
+  // 隐藏的文件输入元素
+  let fileInputRef = $state<HTMLInputElement | null>(null);
+  let pendingUploadWord = $state<Word | null>(null);
+
   // 音频播放
   let playingId = $state<string | null>(null);
   let audioRef = $state<HTMLAudioElement | null>(null);
@@ -509,6 +516,147 @@
     batchResult = null;
     batchProgress = null;
   }
+
+  // 音频上传 Modal 状态
+  let showUploadModal = $state(false);
+  let uploadMode = $state<'file' | 'url'>('url');
+  let uploadUrl = $state('');
+  let uploadLoading = $state(false);
+  let uploadError = $state<string | null>(null);
+  let uploadWord = $state<Word | null>(null);
+
+  // 打开音频上传 Modal
+  function openUploadModal(word: Word) {
+    uploadWord = word;
+    uploadMode = 'url';
+    uploadUrl = '';
+    uploadError = null;
+    showUploadModal = true;
+  }
+
+  // 关闭音频上传 Modal
+  function closeUploadModal() {
+    showUploadModal = false;
+    uploadWord = null;
+    uploadUrl = '';
+    uploadError = null;
+  }
+
+  // 通过 URL 上传音频
+  async function uploadAudioByUrl() {
+    const url = uploadUrl.trim();
+    if (!url) {
+      uploadError = '请输入音频 URL';
+      return;
+    }
+
+    // 验证 URL 格式
+    try {
+      new URL(url);
+    } catch {
+      uploadError = '无效的 URL 格式';
+      return;
+    }
+
+    uploadLoading = true;
+    uploadError = null;
+
+    try {
+      const response = await fetch('/api/upload-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, word: uploadWord?.word }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '上传失败');
+      }
+
+      // 更新数据库中的音频URL
+      const updateResponse = await fetch('/api/words', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: uploadWord?.id, audio_url: result.audio_url }),
+      });
+
+      const updateResult = await updateResponse.json();
+
+      if (!updateResponse.ok) {
+        throw new Error(updateResult.error || '更新音频失败');
+      }
+
+      showToast(`已上传「${uploadWord?.word}」音频`, 'success');
+      closeUploadModal();
+      await loadWords();
+    } catch (e) {
+      uploadError = e instanceof Error ? e.message : '上传失败';
+    } finally {
+      uploadLoading = false;
+    }
+  }
+
+  // 触发文件选择
+  function triggerUploadFile(word: Word) {
+    pendingUploadWord = word;
+    if (fileInputRef) {
+      fileInputRef.click();
+    }
+  }
+
+  // 处理文件选择
+  async function handleFileSelect(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    
+    if (!file || !pendingUploadWord) {
+      return;
+    }
+
+    uploadingAudioId = pendingUploadWord.id;
+    
+    try {
+      const formData = new FormData();
+      formData.append('audio', file);
+      formData.append('word', pendingUploadWord.word);
+
+      const response = await fetch('/api/upload-audio', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '上传失败');
+      }
+
+      // 更新数据库中的音频URL
+      const updateResponse = await fetch('/api/words', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pendingUploadWord.id, audio_url: result.audio_url }),
+      });
+
+      const updateResult = await updateResponse.json();
+
+      if (!updateResponse.ok) {
+        throw new Error(updateResult.error || '更新音频失败');
+      }
+
+      showToast(`已上传「${pendingUploadWord.word}」音频`, 'success');
+      await loadWords();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '上传失败', 'error');
+    } finally {
+      uploadingAudioId = null;
+      pendingUploadWord = null;
+      if (fileInputRef) {
+        fileInputRef.value = ''; // 重置输入
+      }
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -756,14 +904,22 @@
                         取消
                       </button>
                     {:else}
-                      <!-- 浏览模式：显示重新生成音频按钮（高频操作） -->
+                      <!-- 浏览模式：显示音频操作按钮（高频操作） -->
                       <button
                         onclick={() => regenerateAudio(word)}
-                        disabled={regeneratingAudioId === word.id}
+                        disabled={regeneratingAudioId === word.id || uploadingAudioId === word.id}
                         class="mr-2 text-purple-600 hover:text-purple-800 disabled:opacity-50"
                         title="重新生成音频"
                       >
                         {regeneratingAudioId === word.id ? '生成中...' : '🔊'}
+                      </button>
+                      <button
+                        onclick={() => openUploadModal(word)}
+                        disabled={uploadingAudioId === word.id}
+                        class="mr-2 text-orange-600 hover:text-orange-800 disabled:opacity-50"
+                        title="上传自定义音频"
+                      >
+                        {uploadingAudioId === word.id ? '上传中...' : '📤'}
                       </button>
                       <button
                         onclick={() => startEdit(word)}
@@ -791,6 +947,15 @@
       src={playingId ? words.find((w) => w.id === playingId)?.audio_url : ''}
       preload="none"
     ></audio>
+
+    <!-- 隐藏的文件输入元素 -->
+    <input
+      type="file"
+      accept="audio/mp3,audio/mpeg,audio/wav,audio/webm,audio/ogg"
+      bind:this={fileInputRef}
+      onchange={handleFileSelect}
+      class="hidden"
+    />
 
     <!-- 批量导入 Modal -->
     {#if showBatchModal}
@@ -862,6 +1027,105 @@
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- 音频上传 Modal -->
+    {#if showUploadModal}
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+          <h2 class="mb-4 text-lg font-bold">上传自定义音频</h2>
+          <p class="mb-4 text-sm text-gray-600">
+            为「<span class="font-medium">{uploadWord?.word}</span>」上传自定义发音
+          </p>
+          
+          <!-- 模式切换 -->
+          <div class="mb-4 flex gap-2">
+            <button
+              onclick={() => uploadMode = 'url'}
+              class="flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors
+                     {uploadMode === 'url' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+            >
+              🔗 链接
+            </button>
+            <button
+              onclick={() => uploadMode = 'file'}
+              class="flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors
+                     {uploadMode === 'file' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+            >
+              📁 文件
+            </button>
+          </div>
+          
+          {#if uploadMode === 'url'}
+            <!-- URL 输入模式 -->
+            <div class="space-y-4">
+              <div>
+                <label class="mb-1 block text-sm font-medium text-gray-700" for="audio-url">
+                  音频链接
+                </label>
+                <input
+                  id="audio-url"
+                  type="url"
+                  bind:value={uploadUrl}
+                  placeholder="https://..."
+                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+                <p class="mt-1 text-xs text-gray-500">支持 MP3、WAV、WebM、OGG 格式的音频链接</p>
+              </div>
+              
+              {#if uploadError}
+                <p class="text-sm text-red-600">{uploadError}</p>
+              {/if}
+              
+              <div class="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onclick={closeUploadModal}
+                  class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onclick={uploadAudioByUrl}
+                  disabled={uploadLoading}
+                  class="rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {uploadLoading ? '上传中...' : '确认上传'}
+                </button>
+              </div>
+            </div>
+          {:else}
+            <!-- 文件上传模式 -->
+            <div class="space-y-4">
+              <div class="rounded-md border-2 border-dashed border-gray-300 p-6 text-center">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p class="mt-2 text-sm text-gray-600">点击选择音频文件</p>
+                <p class="mt-1 text-xs text-gray-500">支持 MP3、WAV、WebM、OGG（最大 10MB）</p>
+                <button
+                  type="button"
+                  onclick={() => uploadWord && triggerUploadFile(uploadWord)}
+                  class="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  选择文件
+                </button>
+              </div>
+              
+              <div class="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onclick={closeUploadModal}
+                  class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          {/if}
         </div>
       </div>
     {/if}

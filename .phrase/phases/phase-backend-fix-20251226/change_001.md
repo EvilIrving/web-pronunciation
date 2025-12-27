@@ -42,35 +42,28 @@
 
 ## 2024-12-27
 
-### Fix - Svelte rune 错误修复
-- **Modify**: 重命名 `web/src/lib/auth.ts` → `web/src/lib/auth.svelte.ts`
-  - `$state` rune 只能在 `.svelte` 或 `.svelte.ts` 文件中使用
-- **Modify**: 更新 `web/src/routes/admin/+page.svelte` import
-- **Modify**: 更新 `web/src/routes/login/+page.svelte` import
-- **Delete**: 删除旧的 `web/src/lib/auth.ts`
-- **Behavior**: 修复运行时错误 `rune_outside_svelte`
-
-### Fix - 登录认证持久化问题
-- **Add**: `web/src/routes/+layout.server.ts` - 服务端 session 加载
-- **Add**: `web/src/lib/auth.svelte.ts` - localStorage 持久化用户状态
+### Feature - 自定义音频上传功能
+- **Add**: 创建 `web/src/routes/api/upload-audio/+server.ts` - 音频文件上传 API
+  - 支持 MP3、WAV、WebM、OGG 格式
+  - 最大文件限制 10MB
+  - 支持两种上传方式：文件上传 和 URL 上传
+  - 自动解析并上传到 R2 对象存储
+  - 返回公开访问 URL
 - **Modify**: `web/src/routes/admin/+page.svelte`:
-  - 从 localStorage 恢复认证状态
-  - 页面刷新后保持登录
-  - 修复登录成功但页面跳转失败问题
-- **Modify**: `web/src/routes/login/+page.svelte` - 添加 goto 跳转
-- **Behavior**: 登录后自动跳转，刷新页面保持登录状态
-
-### Feature - 删除操作交互优化（高频操作便捷 + 误操作可恢复）
-- **Modify**: `web/src/routes/admin/+page.svelte`:
-  - 新增 `deletedQueue` 状态 - 存储待撤销的删除项
-  - 新增 Toast 组件 - 底部右侧显示删除提示，带撤销按钮
-  - 新增 `deleteWord()` 函数 - 乐观更新 + 后台异步同步
-  - 新增 `undoDelete()` 函数 - 恢复最近删除的项
-  - 新增 `showToast()` / `hideToast()` 函数 - Toast 通知管理
-  - 新增 `handleKeydown()` 函数 - Cmd/Ctrl+Z 撤销快捷键
-  - 添加 `<svelte:window onkeydown={handleKeydown} />` 监听键盘事件
+  - 新增 `uploadingAudioId` 状态 - 按行跟踪上传状态
+  - 新增 `fileInputRef` 和 `pendingUploadWord` - 文件选择管理
+  - 新增 `showUploadModal`、`uploadMode`、`uploadUrl` 等状态 - 上传弹窗管理
+  - 新增 `openUploadModal()` 函数 - 打开上传弹窗
+  - 新增 `closeUploadModal()` 函数 - 关闭上传弹窗
+  - 新增 `uploadAudioByUrl()` 函数 - 通过 URL 上传音频
+  - 新增 `triggerUploadFile()` 函数 - 触发文件选择
+  - 新增 `handleFileSelect()` 函数 - 处理文件上传逻辑
+  - 新增音频上传 Modal - 支持 URL 和文件两种模式切换
+  - 操作列 "📤" 按钮改为打开上传弹窗
 - **Behavior**:
-  - 删除操作即时响应（乐观更新，不等待 API）
-  - 连续删除多个单词时，Toast 显示删除数量
-  - 5 秒内可点击 Toast 撤销或按 Cmd+Z 撤销
-  - API 失败时自动回滚 UI 并提示错误
+  - AI 生成音频错误时，点击 📤 按钮打开上传弹窗
+  - 可选择「链接」模式粘贴音频 URL（如 https://api.frdic.com/...）
+  - 可选择「文件」模式上传本地音频文件
+  - 上传后自动更新数据库中的音频 URL
+  - 上传过程中显示加载状态
+  - 支持格式验证和文件大小限制
