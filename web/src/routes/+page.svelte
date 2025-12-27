@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Word } from '$lib/types';
+  import VirtualList from '$lib/components/VirtualList.svelte';
 
   // 状态
   let words = $state<Word[]>([]);
@@ -12,14 +13,6 @@
   let total = $state(0);
   let currentAudio = $state<HTMLAudioElement | null>(null);
   let playingWordId = $state<string | null>(null);
-
-  // 虚拟列表状态
-  const ITEM_HEIGHT = 80; // 单个项目高度（含 gap 12px）
-  const ITEM_CONTENT_HEIGHT = 68; // 实际内容高度
-  const BUFFER_COUNT = 6;
-  let containerRef = $state<HTMLElement | null>(null);
-  let scrollTop = $state(0);
-  let containerHeight = $state(600);
 
   const LIMIT = 20;
   let searchTimeout: ReturnType<typeof setTimeout>;
@@ -110,90 +103,11 @@
     };
   }
 
-  // 计算列数
-  let columns = $state(2);
-  
-  function updateColumns() {
-    if (typeof window !== 'undefined') {
-      columns = window.innerWidth >= 640 ? 2 : 1;
-    }
-  }
-
-  // 计算行数
-  let rowCount = $derived(Math.ceil(words.length / columns));
-  
-  // 计算总高度
-  let totalHeight = $derived(rowCount * ITEM_HEIGHT);
-  
-  // 计算可见范围
-  let visibleRange = $derived.by(() => {
-    const startRow = Math.floor(scrollTop / ITEM_HEIGHT);
-    const visibleRows = Math.ceil(containerHeight / ITEM_HEIGHT);
-    
-    const startIndex = Math.max(0, (startRow - BUFFER_COUNT) * columns);
-    const endIndex = Math.min(words.length, (startRow + visibleRows + BUFFER_COUNT) * columns);
-    
-    return { startIndex, endIndex };
-  });
-  
-  // 可见项目列表
-  let visibleItems = $derived.by(() => {
-    const items: { word: Word; index: number; top: number; left: string }[] = [];
-    const { startIndex, endIndex } = visibleRange;
-    
-    for (let i = startIndex; i < endIndex; i++) {
-      if (words[i]) {
-        const row = Math.floor(i / columns);
-        const col = i % columns;
-        items.push({
-          word: words[i],
-          index: i,
-          top: row * ITEM_HEIGHT,
-          left: columns === 1 ? '0' : col === 0 ? '0' : '50%'
-        });
-      }
-    }
-    return items;
-  });
-
-  // 处理滚动
-  function handleScroll(event: Event) {
-    const target = event.target as HTMLElement;
-    scrollTop = target.scrollTop;
-    
-    // 检查是否需要加载更多
-    const { scrollHeight, clientHeight } = target;
-    if (scrollHeight - scrollTop - clientHeight < 200 && !isLoading && hasMore) {
+  // 加载更多处理
+  function handleScrollEnd() {
+    if (!isLoading && hasMore) {
       loadWords();
     }
-  }
-
-  // 容器 action
-  function containerAction(node: HTMLElement) {
-    containerRef = node;
-    containerHeight = node.clientHeight;
-    
-    // 使用 IntersectionObserver 检测容器尺寸变化
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        containerHeight = entry.contentRect.height;
-      }
-    });
-    resizeObserver.observe(node);
-    
-    // 监听窗口 resize 更新列数
-    const resizeHandler = () => {
-      updateColumns();
-    };
-    window.addEventListener('resize', resizeHandler);
-    updateColumns();
-
-    return {
-      destroy() {
-        resizeObserver.disconnect();
-        window.removeEventListener('resize', resizeHandler);
-      }
-    };
   }
 
   // 初始加载
@@ -240,11 +154,7 @@
   </header>
 
   <!-- 词汇列表 -->
-  <main 
-    class="max-w-4xl mx-auto px-4 py-6 h-[calc(100vh-120px)] overflow-y-auto"
-    use:containerAction
-    onscroll={handleScroll}
-  >
+  <main class="max-w-5xl mx-auto px-4 py-6 h-[calc(100vh-180px)]">
     {#if !isInitialized}
       <!-- 初始加载中 -->
       <div class="flex flex-col items-center justify-center py-20">
@@ -270,64 +180,65 @@
         </p>
       </div>
     {:else}
-      <!-- 虚拟列表容器 -->
-      <div 
-        class="relative"
-        style="height: {totalHeight}px;"
+      <!-- 虚拟列表 -->
+      <VirtualList
+        items={words}
+        itemHeight={56}
+        gap={10}
+        columns={1}
+        columnBreakpoints={{ 640: 2 }}
+        height="100%"
+        onScrollEnd={handleScrollEnd}
+        getKey={(word) => word.id}
       >
-        {#each visibleItems as { word, index, top, left } (word.id)}
-          <div
-            class="absolute"
-            style="top: {top}px; left: {left}; width: {columns === 1 ? '100%' : '50%'}; height: {ITEM_HEIGHT}px; padding: 0 6px 12px;"
+        {#snippet children({ item: word })}
+          <button
+            onclick={() => playAudio(word)}
+            disabled={!word.audio_url}
+            class="w-full h-full group relative flex items-center gap-3.5 p-3 bg-white/80 backdrop-blur-sm rounded-[14px]
+                   shadow-[0_1px_3px_rgba(0,0,0,0.06)]
+                   hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] hover:bg-white
+                   active:scale-[0.98]
+                   disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100
+                   transition-all duration-200 ease-out text-left"
           >
-            <button
-              onclick={() => playAudio(word)}
-              disabled={!word.audio_url}
-              class="w-full h-full group relative flex items-center gap-4 p-4 bg-white rounded-2xl 
-                     border border-slate-200 shadow-sm
-                     hover:shadow-md hover:border-blue-300 hover:bg-blue-50/30
-                     disabled:opacity-50 disabled:cursor-not-allowed
-                     transition-all duration-200 text-left"
-            >
-              <!-- 播放图标 -->
-              <div class="shrink-0 w-12 h-12 flex items-center justify-center rounded-xl
-                          {word.audio_url ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white cursor-pointer' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}
-                          transition-transform duration-200 group-hover:scale-105">
-                {#if playingWordId === word.id}
-                  <!-- 播放中动画 -->
-                  <div class="flex items-end gap-0.5 h-5">
-                    <span class="w-1 bg-white rounded-full animate-bounce" style="height: 40%; animation-delay: 0ms;"></span>
-                    <span class="w-1 bg-white rounded-full animate-bounce" style="height: 70%; animation-delay: 150ms;"></span>
-                    <span class="w-1 bg-white rounded-full animate-bounce" style="height: 50%; animation-delay: 300ms;"></span>
-                    <span class="w-1 bg-white rounded-full animate-bounce" style="height: 80%; animation-delay: 450ms;"></span>
-                  </div>
-                {:else if word.audio_url}
-                  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                {:else}
-                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                  </svg>
-                {/if}
-              </div>
+            <!-- 播放图标 -->
+            <div class="shrink-0 w-10 h-10 flex items-center justify-center rounded-[8px]
+                        {playingWordId === word.id ? 'bg-blue-500 text-white' : word.audio_url ? 'bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-slate-600' : 'bg-slate-50 text-slate-300'}
+                        transition-all duration-200">
+              {#if playingWordId === word.id}
+                <!-- 播放中动画 -->
+                <div class="flex items-end gap-[2px] h-3.5">
+                  <span class="w-[2px] bg-white rounded-full animate-bounce" style="height: 40%; animation-delay: 0ms;"></span>
+                  <span class="w-[2px] bg-white rounded-full animate-bounce" style="height: 70%; animation-delay: 150ms;"></span>
+                  <span class="w-[2px] bg-white rounded-full animate-bounce" style="height: 50%; animation-delay: 300ms;"></span>
+                  <span class="w-[2px] bg-white rounded-full animate-bounce" style="height: 80%; animation-delay: 450ms;"></span>
+                </div>
+              {:else if word.audio_url}
+                <svg class="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              {:else}
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6l4.72-4.72a.75.75 0 011.28.531V19.94a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.506-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.395C2.806 8.757 3.63 8.25 4.51 8.25H6.75z" />
+                </svg>
+              {/if}
+            </div>
 
-              <!-- 单词信息 -->
-              <div class="flex-1 min-w-0 flex items-baseline gap-2">
-                <span class="text-lg font-semibold text-slate-800">
-                  {word.word}
+            <!-- 单词信息 -->
+            <div class="flex-1 min-w-0 flex items-baseline gap-2">
+              <span class="text-[16px] font-medium text-slate-800">
+                {word.word}
+              </span>
+              {#if word.ipa}
+                <span class="text-[13px] text-slate-400 font-mono truncate">
+                  /{word.ipa}/
                 </span>
-                {#if word.ipa}
-                  <span class="text-sm text-slate-400 font-mono truncate">
-                    /{word.ipa}/
-                  </span>
-                {/if}
-              </div>
-            </button>
-          </div>
-        {/each}
-      </div>
+              {/if}
+            </div>
+          </button>
+        {/snippet}
+      </VirtualList>
 
       <!-- 加载更多状态 -->
       {#if isLoading}
@@ -350,18 +261,5 @@
 </div>
 
 <style>
-  /* 自定义滚动条 */
-  main::-webkit-scrollbar {
-    width: 8px;
-  }
-  main::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  main::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-  }
-  main::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-  }
+  /* 无需额外样式，虚拟列表组件已包含滚动条样式 */
 </style>
