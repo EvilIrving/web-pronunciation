@@ -1,4 +1,4 @@
-import type { Word } from './types';
+import type { Word, IpaSource } from './types';
 
 type Accent = 'us' | 'uk';
 
@@ -18,6 +18,7 @@ export async function addWord(data: {
   ipa_uk?: string;
   audio_url_us?: string;
   audio_url_uk?: string;
+  ipa_source?: IpaSource;
 }) {
   const res = await fetch('/api/words', {
     method: 'POST',
@@ -27,7 +28,7 @@ export async function addWord(data: {
   return res.json() as Promise<{ data?: Word; error?: string }>;
 }
 
-export async function updateWord(data: { id: string; [key: string]: string }) {
+export async function updateWord(data: { id: string; ipa_source?: IpaSource; [key: string]: string | IpaSource | undefined }) {
   const res = await fetch('/api/words', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -55,7 +56,7 @@ export async function fetchPhonetics(word: string, provider: 'youdao' | 'eudic' 
   const res = await fetch(`/api/phonetics?word=${encodeURIComponent(word)}&provider=${provider}`);
   const json = await res.json();
   if (!res.ok || !json.success) throw new Error(json.error || 'Phonetics failed');
-  return { ipa_us: json.ipa_us || '', ipa_uk: json.ipa_uk || '' };
+  return { ipa_us: json.ipa_us || '', ipa_uk: json.ipa_uk || '', ipa_source: json.ipa_source as IpaSource };
 }
 
 export async function fetchEudic(word: string) {

@@ -1,3 +1,5 @@
+export type IpaSource = 'dict' | 'llm' | null;
+
 export interface Word {
   id: string;
   word: string;
@@ -6,6 +8,7 @@ export interface Word {
   audio_url_us: string | null;
   ipa_uk: string | null;
   audio_url_uk: string | null;
+  ipa_source: IpaSource;
   created_at: string;
   updated_at: string;
 }
@@ -16,6 +19,7 @@ export interface WordInsert {
   audio_url_us?: string | null;
   ipa_uk?: string | null;
   audio_url_uk?: string | null;
+  ipa_source?: IpaSource;
 }
 
 export interface WordUpdate {
@@ -24,6 +28,7 @@ export interface WordUpdate {
   audio_url_us?: string | null;
   ipa_uk?: string | null;
   audio_url_uk?: string | null;
+  ipa_source?: IpaSource;
 }
 
 export interface BatchUpdateTask {

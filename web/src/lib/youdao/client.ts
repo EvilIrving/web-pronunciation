@@ -14,6 +14,8 @@ function sign(word: string): string {
 }
 
 export async function getPhonetics(word: string): Promise<YoudaoResult> {
+  console.log(`[Youdao] 查询音标: "${word}"`);
+  
   const form = new URLSearchParams({
     q: word, le: 'en', t: '3', client: 'web',
     sign: sign(word), keyfrom: 'webdict'
@@ -25,21 +27,31 @@ export async function getPhonetics(word: string): Promise<YoudaoResult> {
     body: form
   });
 
-  if (!res.ok) throw new Error(`youdao: ${res.status}`);
+  if (!res.ok) {
+    console.error(`[Youdao] 请求失败: ${res.status} ${res.statusText}`);
+    throw new Error(`youdao: ${res.status}`);
+  }
 
   const data = await res.json();
   const w = data?.simple?.word?.[0];
 
-  return {
+  console.log(data?.simple,'simple');
+  
+  const result = {
     word: word.toLowerCase(),
     ipa_us: w?.usphone || null,
     ipa_uk: w?.ukphone || null,
     audio_us: `${VOICE}?audio=${encodeURIComponent(word)}&type=2`,
     audio_uk: `${VOICE}?audio=${encodeURIComponent(word)}&type=1`
   };
+
+//   console.log(`[Youdao] 查询成功: "${word}" -> US: ${result.ipa_us || '无'}, UK: ${result.ipa_uk || '无'}`);
+  return result;
 }
 
 export async function fetchAudio(word: string, accent: 'us' | 'uk' = 'us'): Promise<Uint8Array> {
+  console.log(`[Youdao] 获取音频: "${word}" (${accent.toUpperCase()})`);
+  
   const type = accent === 'uk' ? 1 : 2;
   const url = `${VOICE}?audio=${encodeURIComponent(word)}&type=${type}`;
 
@@ -47,8 +59,17 @@ export async function fetchAudio(word: string, accent: 'us' | 'uk' = 'us'): Prom
     headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' }
   });
 
-  if (!res.ok) throw new Error(`youdao audio: ${res.status}`);
+  if (!res.ok) {
+    console.error(`[Youdao] 音频请求失败: ${res.status} ${res.statusText}`);
+    throw new Error(`youdao audio: ${res.status}`);
+  }
+  
   const buf = await res.arrayBuffer();
-  if (buf.byteLength === 0) throw new Error('empty audio');
+  if (buf.byteLength === 0) {
+    console.error(`[Youdao] 音频为空: "${word}"`);
+    throw new Error('empty audio');
+  }
+  
+  console.log(`[Youdao] 音频获取成功: "${word}" (${accent.toUpperCase()}), 大小: ${buf.byteLength} bytes`);
   return new Uint8Array(buf);
 }

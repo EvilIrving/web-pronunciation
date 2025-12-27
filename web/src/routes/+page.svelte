@@ -79,16 +79,17 @@
   {@const ipaText = isUs ? word.ipa_us : word.ipa_uk}
   {@const hasAudio = isUs ? word.audio_url_us : word.audio_url_uk}
   {@const active = isPlaying(word, accent)}
+  {@const isAI = word.ipa_source === 'llm'}
   {#if ipaText}
     {#if hasAudio}
       <button 
         onclick={() => play(word, accent)} 
         class="bg-transparent border-none p-0 font-mono text-terminal-accent cursor-pointer hover:text-terminal-accent-hover {active ? 'text-terminal-accent-active' : ''}"
       >
-        [{isUs ? 'US' : 'UK'}] /{ipaText}/{active ? ' ▮▮' : ''}
+        [{isUs ? 'US' : 'UK'}] /{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}{active ? ' ▮▮' : ''}
       </button>
     {:else}
-      <span class="text-terminal-disabled cursor-default">[{isUs ? 'US' : 'UK'}] /{ipaText}/</span>
+      <span class="text-terminal-disabled cursor-default">[{isUs ? 'US' : 'UK'}] /{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}</span>
     {/if}
   {/if}
 {/snippet}
