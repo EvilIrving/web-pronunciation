@@ -20,11 +20,18 @@
 
   // 响应式字体大小
   let isMobile = $state(false);
+  let copied = $state(false);
 
   function checkMobile() {
     if (typeof window !== 'undefined') {
       isMobile = window.innerWidth < 640;
     }
+  }
+
+  function copyEmail() {
+    navigator.clipboard.writeText('jescain2024@gmail.com');
+    copied = true;
+    setTimeout(() => copied = false, 2000);
   }
 
   async function load(reset = false) {
@@ -127,7 +134,13 @@
     {#if !isInitialized}
       <p class="text-terminal-text-muted py-4 text-center">loading...</p>
     {:else if !words.length}
-      <p class="text-terminal-text-muted py-4 text-center">无匹配结果{searchQuery ? `："${searchQuery}"` : ''}</p>
+      <p class="text-terminal-text-muted py-4 text-center">
+        未找到"{searchQuery}"
+        {#if searchQuery}
+          <span class="block mt-2">如果希望收录此词，请 <button onclick={copyEmail} class="text-terminal-accent hover:text-terminal-accent-hover underline bg-transparent border-none p-0 cursor-pointer font-inherit">{copied ? '已复制 ✓' : '复制邮箱'}</button></span>
+          <span class="block mt-1 text-xs text-terminal-text-dim">或 <a href="mailto:jescain2024@gmail.com?subject=建议收录词汇：{searchQuery}&body=请补充该词的发音信息" class="text-terminal-text-dim hover:text-terminal-text-secondary underline">点击发邮件给我</a></span>
+        {/if}
+      </p>
     {:else}
       <VirtualList
         items={words}
