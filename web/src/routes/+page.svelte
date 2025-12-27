@@ -87,12 +87,16 @@
     return playing?.id === word.id && playing?.accent === accent;
   }
 
-  onMount(() => { checkMobile(); load(true); window.addEventListener('resize', checkMobile); });
+  onMount(() => {
+    console.log('%c错了不要紧，顺口就是好。', 'color: #666; font-style: italic;');
+    checkMobile(); load(true); window.addEventListener('resize', checkMobile);
+  });
 </script>
 
 {#snippet ipa(word: Word, accent: Accent)}
   {@const isUs = accent === 'us'}
-  {@const ipaText = isUs ? word.ipa_us : word.ipa_uk}
+  {@const rawIpa = isUs ? word.ipa_us : word.ipa_uk}
+  {@const ipaText = rawIpa?.replace(/^\/+|\/+$/g, '') ?? ''}
   {@const hasAudio = isUs ? word.audio_url_us : word.audio_url_uk}
   {@const active = isPlaying(word, accent)}
   {@const isAI = word.ipa_source === 'llm'}
@@ -102,10 +106,10 @@
         onclick={() => play(word, accent)} 
         class="bg-transparent border-none p-0 font-mono text-terminal-accent cursor-pointer hover:text-terminal-accent-hover {active ? 'text-terminal-accent-active' : ''}"
       >
-        <sub class="text-[9px] text-terminal-text-muted">{isUs ? 'US' : 'UK'}</sub> /{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}{active ? ' ▮▮' : ''}
+        <sub class="text-[9px] text-terminal-text-muted mr-1">{isUs ? 'US' : 'UK'}</sub>/{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}{#if active}<span class="ml-1">▮▮</span>{/if}
       </button>
     {:else}
-      <span class="text-terminal-disabled cursor-default"><sub class="text-[9px] text-terminal-text-muted">{isUs ? 'US' : 'UK'}</sub> /{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}</span>
+      <span class="text-terminal-disabled cursor-default"><sub class="text-[9px] text-terminal-text-muted mr-1">{isUs ? 'US' : 'UK'}</sub>/{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}</span>
     {/if}
   {/if}
 {/snippet}
@@ -164,7 +168,8 @@
         {/snippet}
       </VirtualList>
       {#if isLoading}<p class="text-terminal-text-muted py-4 text-center text-sm">...</p>{/if}
-      {#if !hasMore}<p class="text-terminal-text-muted py-4 text-center text-sm">-- EOF --</p>{/if}
+      {#if !hasMore}<p class="text-terminal-text-muted py-4 text-center text-sm">-- EOF --</p>
+        <p class="text-terminal-text-dim text-xs text-center pb-4">错了不要紧，顺口就是好。</p>{/if}
     {/if}
   </main>
 </div>
