@@ -10,7 +10,7 @@ node_modules/
 .output/
 /build/
 dist/
-.phrase
+.phrase/*
 
 # SvelteKit
 .svelte-kit/
