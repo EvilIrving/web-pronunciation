@@ -1,1 +1,126 @@
 @import 'tailwindcss';
+
+@theme {
+  /* Terminal Color Palette */
+  --color-terminal-bg: #1a1a1a;
+  --color-terminal-bg-secondary: #222;
+  --color-terminal-bg-hover: #262626;
+  --color-terminal-border: #333;
+  --color-terminal-border-light: #262626;
+  --color-terminal-text-primary: #e0e0e0;
+  --color-terminal-text-secondary: #b0b0b0;
+  --color-terminal-text-muted: #555;
+  --color-terminal-text-dim: #666;
+  --color-terminal-disabled: #444;
+  --color-terminal-accent: #6a9955;
+  --color-terminal-accent-hover: #8bc36a;
+  --color-terminal-accent-active: #b5cea8;
+  --color-terminal-error: #f14c4c;
+  --color-terminal-warning: #cca700;
+  --color-terminal-info: #3794ff;
+
+  /* Terminal Font Stack */
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+}
+
+/* Base Terminal Styles */
+* {
+  font-family: var(--font-mono);
+}
+
+body {
+  background-color: var(--color-terminal-bg);
+  color: var(--color-terminal-text-primary);
+}
+
+/* Terminal Button Base */
+.btn-terminal {
+  background-color: transparent;
+  border: 1px solid var(--color-terminal-border);
+  color: var(--color-terminal-accent);
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.btn-terminal:hover:not(:disabled) {
+  background-color: var(--color-terminal-bg-hover);
+  border-color: var(--color-terminal-accent);
+  color: var(--color-terminal-accent-hover);
+}
+
+.btn-terminal:disabled {
+  color: var(--color-terminal-disabled);
+  cursor: not-allowed;
+}
+
+/* Terminal Input Base */
+.input-terminal {
+  background-color: var(--color-terminal-bg);
+  border: 1px solid var(--color-terminal-border);
+  color: var(--color-terminal-text-primary);
+  outline: none;
+}
+
+.input-terminal:focus {
+  border-color: var(--color-terminal-accent);
+}
+
+.input-terminal::placeholder {
+  color: var(--color-terminal-text-muted);
+}
+
+/* Terminal Table Base */
+.table-terminal {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table-terminal th,
+.table-terminal td {
+  border: 1px solid var(--color-terminal-border);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.table-terminal th {
+  background-color: var(--color-terminal-bg-secondary);
+  color: var(--color-terminal-text-secondary);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.table-terminal tr:hover td {
+  background-color: var(--color-terminal-bg-hover);
+}
+
+/* Terminal Modal Base */
+.modal-terminal {
+  background-color: var(--color-terminal-bg-secondary);
+  border: 1px solid var(--color-terminal-border);
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-terminal-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-terminal-border);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-terminal-text-muted);
+}
+
+/* Selection */
+::selection {
+  background-color: var(--color-terminal-accent);
+  color: var(--color-terminal-bg);
+}

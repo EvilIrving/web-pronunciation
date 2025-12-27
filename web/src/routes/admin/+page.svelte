@@ -187,7 +187,7 @@
     const res = await fetch(`/api/eudic?word=${encodeURIComponent(word)}`);
     if (!res.ok) throw new Error('Eudic API 错误');
     const data = await res.json();
-    if (!data.success) throw new Error(data.error || '获取失败');
+    if (!data.success) throw new Error(data.error || 'unknown error');
     return {
       ipa_us: data.ipa_us || '',
       ipa_uk: data.ipa_uk || '',
@@ -231,7 +231,7 @@
       updated_at: new Date().toISOString(),
     };
     words = [optimisticWord, ...words];
-    showToast(`正在添加「${word}」...`, 'info');
+    showToast(`adding "${word}"...`, 'info');
 
     try {
       const eudic = await fetchEudic(word).catch(() => ({ ipa_us: '', ipa_uk: '' }));
@@ -253,7 +253,7 @@
       if (!response.ok) throw new Error(result.error || '保存失败');
 
       words = words.map(w => w.id === tempId ? { ...w, ...result.data } : w);
-      showToast(`已添加「${word}」`, 'success');
+      showToast(`added "${word}"`, 'success');
     } catch (e) {
       words = words.filter(w => w.id !== tempId);
       quickAddError = e instanceof Error ? e.message : '保存失败';
@@ -268,7 +268,7 @@
     refreshingWordId = word.id;
     const original = { ...word };
     words = words.map(w => w.id === word.id ? { ...w, ipa: '', ipa_uk: '', audio_url: '', audio_url_uk: '' } : w);
-    showToast(`正在刷新「${word.word}」...`, 'info');
+    showToast(`refreshing "${word.word}"...`, 'info');
 
     try {
       console.log(`[Refresh] Starting for word: ${word.word}`);
@@ -280,7 +280,7 @@
 
       if (!eudic.ipa_us && !eudic.ipa_uk && !tts.audio_url && !tts.audio_url_uk) {
         words = words.map(w => w.id === word.id ? original : w);
-        showToast('刷新失败', 'error');
+        showToast('refresh failed', 'error');
         refreshingWordId = null;
         return;
       }
@@ -300,10 +300,10 @@
       if (!response.ok) throw new Error(result.error || '更新失败');
 
       words = words.map(w => w.id === word.id ? { ...w, ...result.data } : w);
-      showToast(`已刷新「${word.word}」`, 'success');
+      showToast(`refreshed "${word.word}"`, 'success');
     } catch (e) {
       words = words.map(w => w.id === word.id ? original : w);
-      showToast('刷新失败', 'error');
+      showToast('refresh failed', 'error');
     } finally {
       refreshingWordId = null;
     }
@@ -312,11 +312,11 @@
   // 乐观删除
   async function deleteWord(word: Word) {
     words = words.filter(w => w.id !== word.id);
-    showToast(`已删除「${word.word}」`, 'success');
+    showToast(`rm "${word.word}"`, 'success');
 
     fetch(`/api/words?id=${word.id}`, { method: 'DELETE' }).catch(() => {
       words = [...words, word];
-      showToast('删除失败，已恢复', 'error');
+      showToast('rm failed, restored', 'error');
     });
   }
 
@@ -373,7 +373,7 @@
       .map((l) => l.trim())
       .filter((l) => l);
     if (lines.length === 0) {
-      alert('请输入要导入的单词');
+      alert('input at least one word');
       return;
     }
 
@@ -424,14 +424,14 @@
         const result = await response.json();
 
         if (!response.ok) {
-          failed.push(`${word}: ${result.error || '未知错误'}`);
+          failed.push(`${word}: ${result.error || 'unknown error'}`);
           words = words.filter(w => w.id !== tempId);
         } else {
           success++;
           words = words.map(w => w.id === tempId ? { ...w, ...result.data } : w);
         }
       } catch (e) {
-        failed.push(`${word}: ${e instanceof Error ? e.message : '未知错误'}`);
+        failed.push(`${word}: ${e instanceof Error ? e.message : 'unknown error'}`);
         words = words.filter(w => w.id !== tempId);
       }
 
@@ -446,10 +446,10 @@
     batchProgress = null;
 
     if (success > 0) {
-      showToast(`成功导入 ${success} 个单词`, 'success');
+      showToast(`imported ${success} word(s)`, 'success');
     }
     if (failed.length > 0) {
-      showToast(`导入失败 ${failed.length} 个单词`, 'error');
+      showToast(`failed ${failed.length} word(s)`, 'error');
     }
   }
 
@@ -490,7 +490,7 @@
   async function uploadAudioByUrl() {
     const url = uploadUrl.trim();
     if (!url) {
-      uploadError = '请输入音频 URL';
+      uploadError = 'input audio URL';
       return;
     }
 
@@ -498,7 +498,7 @@
     try {
       new URL(url);
     } catch {
-      uploadError = '无效的 URL 格式';
+      uploadError = 'invalid URL format';
       return;
     }
 
@@ -514,7 +514,7 @@
 
     // 1. 乐观更新：立即清空音频 URL
     words = words.map(w => w.id === uploadWordId ? { ...w, audio_url: '' } : w);
-    showToast(`正在上传「${uploadWordText}」音频...`, 'info');
+    showToast(`uploading "${uploadWordText}" audio...`, 'info');
     closeUploadModal();
 
     try {
@@ -545,11 +545,11 @@
 
       // 成功：更新音频 URL
       words = words.map(w => w.id === uploadWordId ? { ...w, audio_url: result.audio_url } : w);
-      showToast(`已上传「${uploadWordText}」音频`, 'success');
+      showToast(`uploaded "${uploadWordText}" audio`, 'success');
     } catch (e) {
       // 失败：恢复原音频 URL
       words = words.map(w => w.id === uploadWordId ? { ...w, audio_url: originalAudioUrl } : w);
-      showToast(e instanceof Error ? e.message : '上传失败', 'error');
+      showToast(e instanceof Error ? e.message : 'upload failed', 'error');
     } finally {
       uploadLoading = false;
     }
@@ -583,7 +583,7 @@
 
     // 1. 乐观更新：立即清空音频 URL
     words = words.map(w => w.id === pendingWordId ? { ...w, audio_url: '' } : w);
-    showToast(`正在上传「${pendingWordText}」音频...`, 'info');
+    showToast(`uploading "${pendingWordText}" audio...`, 'info');
     
     try {
       const formData = new FormData();
@@ -616,11 +616,11 @@
 
       // 成功：更新音频 URL
       words = words.map(w => w.id === pendingWordId ? { ...w, audio_url: result.audio_url } : w);
-      showToast(`已上传「${pendingWordText}」音频`, 'success');
+      showToast(`uploaded "${pendingWordText}" audio`, 'success');
     } catch (e) {
       // 失败：恢复原音频 URL
       words = words.map(w => w.id === pendingWordId ? { ...w, audio_url: originalAudioUrl } : w);
-      showToast(e instanceof Error ? e.message : '上传失败', 'error');
+      showToast(e instanceof Error ? e.message : 'upload failed', 'error');
     } finally {
       uploadingAudioId = null;
       pendingUploadWord = null;
@@ -633,14 +633,14 @@
   // 全量更新：从 Eudic 获取所有缺失的音标和音频
   async function fullUpdate() {
     if (words.length === 0) {
-      showToast('没有词汇数据', 'error');
+      showToast('no data', 'error');
       return;
     }
 
     loading = true;
     let updated = 0;
     let failed = 0;
-    showToast('开始全量更新...', 'info');
+    showToast('starting full-update...', 'info');
 
     for (const word of words) {
       try {
@@ -679,50 +679,39 @@
     }
 
     loading = false;
-    showToast(`全量更新完成：成功 ${updated}，失败 ${failed}`, 'success');
+    showToast(`full-update done: ${updated} ok, ${failed} failed`, 'success');
   }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 <svelte:head>
-  <title>后台管理 - 词汇管理</title>
+  <title>admin - word management</title>
 </svelte:head>
 
 <!-- Snippets -->
+{#snippet centerMessage(text: string)}
+  <div class="flex min-h-screen items-center justify-center bg-terminal-bg">
+    <div class="text-terminal-text-dim">{text}</div>
+  </div>
+{/snippet}
+
 {#snippet playIcon(isPlaying: boolean)}
   {#if isPlaying}
-    <svg class="h-5 w-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-      <rect x="6" y="4" width="4" height="16" />
-      <rect x="14" y="4" width="4" height="16" />
-    </svg>
+    <span class="inline-block animate-pulse">▮▮</span>
   {:else}
-    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-      <path d="M8 5v14l11-7z" />
-    </svg>
+    <span class="inline-block">▶</span>
   {/if}
 {/snippet}
 
 {#snippet toastIcon(type: 'success' | 'error' | 'info')}
   {#if type === 'success'}
-    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-    </svg>
+    <span class="text-terminal-accent">[ok]</span>
   {:else if type === 'error'}
-    <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-    </svg>
+    <span class="text-terminal-error">[fail]</span>
   {:else}
-    <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
+    <span class="text-terminal-info">[info]</span>
   {/if}
-{/snippet}
-
-{#snippet centerMessage(text: string)}
-  <div class="flex min-h-screen items-center justify-center bg-gray-100">
-    <div class="text-gray-500">{text}</div>
-  </div>
 {/snippet}
 
 {#snippet ipaCell(word: Word, type: 'us' | 'uk')}
@@ -730,85 +719,102 @@
   {@const url = type === 'us' ? word.audio_url : word.audio_url_uk}
   {@const isPlaying = playingAudio?.id === word.id && playingAudio?.type === type}
   {@const hasAudio = !!url}
-  {@const baseColor = type === 'us' ? 'text-blue-600' : 'text-green-600'}
-  {@const hoverColor = type === 'us' ? 'hover:text-blue-800 hover:bg-blue-50' : 'hover:text-green-800 hover:bg-green-50'}
+  {@const baseColor = type === 'us' ? 'text-terminal-info' : 'text-terminal-accent'}
+  {@const hoverColor = type === 'us' ? 'hover:text-terminal-info hover:bg-terminal-bg-hover' : 'hover:text-terminal-accent-hover hover:bg-terminal-bg-hover'}
   {#if ipa}
     {#if hasAudio}
       <button
         onclick={() => playAudio(word, type)}
-        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer {baseColor} {hoverColor} {isPlaying ? 'bg-opacity-20 animate-pulse' : ''}"
-        title="点击播放"
+        class="inline-flex items-center gap-1 px-1.5 py-0.5 border border-transparent cursor-pointer {baseColor} {hoverColor} {isPlaying ? 'border-terminal-accent bg-terminal-bg-hover' : ''}"
+        title="click to play"
       >
         <span>{ipa}</span>
         {#if isPlaying}
-          <svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
-            <rect x="6" y="4" width="4" height="16" />
-            <rect x="14" y="4" width="4" height="16" />
-          </svg>
+          {@render playIcon(true)}
         {/if}
       </button>
     {:else}
-      <span class="text-gray-400 px-1.5 py-0.5" title="无音频">{ipa}</span>
+      <span class="text-terminal-text-muted px-1.5 py-0.5" title="no audio">{ipa}</span>
     {/if}
   {:else}
-    <span class="text-gray-300">-</span>
+    <span class="text-terminal-text-dim">-</span>
   {/if}
 {/snippet}
 
+{#snippet btn(text: string, onclick: () => void, disabled?: boolean, loading?: boolean)}
+  <button
+    {onclick}
+    {disabled}
+    class="btn-terminal px-3 py-1 text-sm {disabled || loading ? 'opacity-50' : ''}"
+  >
+    {loading ? 'running...' : text}
+  </button>
+{/snippet}
+
+{#snippet actionBtns(word: Word)}
+  {@const refreshing = refreshingWordId === word.id}
+  {@const uploading = uploadingAudioId === word.id}
+  {@const disabled = refreshing || uploading}
+  <div class="flex gap-2 justify-end">
+    {@render btn('refresh', () => refreshWord(word), disabled, refreshing)}
+    {@render btn('upload', () => openUploadModal(word), uploading, uploading)}
+    <button
+      onclick={() => deleteWord(word)}
+      class="btn-terminal px-3 py-1 text-sm text-terminal-error hover:text-terminal-error hover:border-terminal-error"
+      title="remove word"
+    >
+      rm
+    </button>
+  </div>
+{/snippet}
+
 {#if authLoading}
-  {@render centerMessage('检查登录状态...')}
+  {@render centerMessage('checking auth...')}
 {:else if !isAuthenticated}
-  {@render centerMessage('正在重定向到登录页...')}
+  {@render centerMessage('redirecting to login...')}
 {:else}
-  <div class="min-h-screen bg-gray-100">
+  <div class="min-h-screen bg-terminal-bg text-terminal-text-primary font-mono">
     <!-- Toast 通知 -->
     {#if toastVisible}
-      <div class="fixed bottom-6 right-6 z-50 animate-fade-in">
-        <div class="flex items-center gap-3 px-4 py-3 bg-white rounded-xl shadow-lg border
-                    {toastType === 'success' ? 'border-green-200' : toastType === 'error' ? 'border-red-200' : 'border-blue-200'}">
+      <div class="fixed bottom-6 right-6 z-50">
+        <div class="flex items-center gap-3 px-4 py-2 border border-terminal-border bg-terminal-bg-secondary">
           {@render toastIcon(toastType)}
-          <span class="text-sm text-gray-700 font-medium">{toastMessage}</span>
+          <span class="text-sm text-terminal-text-primary">{toastMessage}</span>
           <button
             onclick={hideToast}
-            class="ml-1 p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-            aria-label="关闭通知"
+            class="ml-2 p-1 text-terminal-text-muted hover:text-terminal-text-secondary"
+            aria-label="close"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            ×
           </button>
         </div>
       </div>
     {/if}
 
     <!-- 顶部导航 -->
-    <header class="bg-white shadow">
-      <div class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+    <header class="sticky top-0 z-40 border-b border-terminal-border bg-terminal-bg-secondary">
+      <div class="mx-auto max-w-7xl px-4 py-3">
         <div class="flex items-center justify-between">
-          <h1 class="text-xl font-bold text-gray-900">词汇管理后台</h1>
+          <h1 class="text-lg font-medium text-terminal-text-primary">
+            $ <span class="text-terminal-accent">admin</span>
+          </h1>
           <div class="flex items-center gap-4">
             <!-- 用户信息 -->
-            <span class="text-sm text-gray-600">
-              {authState.user?.email || '用户'}
+            <span class="text-sm text-terminal-text-secondary">
+              {authState.user?.email || 'user'}
             </span>
             <!-- 退出按钮 -->
-            <button
-              onclick={handleSignOut}
-              class="rounded-md bg-gray-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
-            >
-              退出
-            </button>
+            {@render btn('logout', handleSignOut)}
             <!-- 模型选择器 -->
             <div class="flex items-center gap-2">
-              <label for="model-select" class="text-sm text-gray-600">模型:</label>
+              <span class="text-sm text-terminal-text-secondary">model:</span>
               <select
-                id="model-select"
                 bind:value={selectedModel}
                 disabled={modelsLoading}
-                class="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                class="input-terminal px-2 py-1 text-sm focus:border-terminal-accent"
               >
                 {#if modelsLoading}
-                  <option>加载中...</option>
+                  <option>loading...</option>
                 {:else}
                   {#each availableModels as model (model.id)}
                     <option value={model.id}>{model.name}</option>
@@ -816,46 +822,29 @@
                 {/if}
               </select>
             </div>
-            <button
-              onclick={() => (showBatchModal = true)}
-              class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
-            >
-              批量导入
-            </button>
-            <button
-              onclick={fullUpdate}
-              disabled={loading}
-              class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {loading ? '更新中...' : '全量更新'}
-            </button>
+            {@render btn('batch-import', () => showBatchModal = true)}
+            {@render btn('full-update', fullUpdate, loading, loading)}
           </div>
         </div>
       </div>
     </header>
 
-    <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <main class=" mx-auto max-w-2/3 px-4 py-4">
       <!-- 快速添加 -->
       <div class="mb-4">
         <div class="flex gap-2">
           <input
             type="text"
-            placeholder="快速添加单词（输入后按 Enter）..."
+            placeholder="$ grep 'word' | add"
             bind:value={quickAddWord}
             onkeydown={(e) => e.key === 'Enter' && quickAdd()}
             disabled={quickAddLoading}
-            class="flex-1 rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            class="input-terminal flex-1 px-3 py-2 placeholder:text-terminal-text-muted"
           />
-          <button
-            onclick={quickAdd}
-            disabled={quickAddLoading}
-            class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {quickAddLoading ? '保存中...' : '添加'}
-          </button>
+          {@render btn('add', quickAdd, quickAddLoading, quickAddLoading)}
         </div>
         {#if quickAddError}
-          <p class="mt-1 text-sm text-red-600">{quickAddError}</p>
+          <p class="mt-1 text-sm text-terminal-error">{quickAddError}</p>
         {/if}
       </div>
 
@@ -863,85 +852,59 @@
       <div class="mb-4">
         <input
           type="text"
-          placeholder="搜索词汇..."
+          placeholder="$ grep 'pattern'"
           bind:value={searchQuery}
-          class="w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none sm:max-w-md"
+          class="input-terminal w-full px-3 py-2 sm:max-w-md placeholder:text-terminal-text-muted"
         />
       </div>
 
       <!-- 统计信息 -->
-      <div class="mb-4 text-sm text-gray-600">
-        共 {filteredWords.length} 条记录
+      <div class="mb-4 text-sm text-terminal-text-secondary">
+        {filteredWords.length} entries
         {#if filteredWords.length !== words.length}
-          （总计 {words.length} 条）
+          ({words.length} total)
         {/if}
       </div>
 
       <!-- 词汇列表 -->
       {#if loading}
-        <div class="py-12 text-center text-gray-500">加载中...</div>
+        <div class="py-8 text-center text-terminal-text-dim">loading...</div>
       {:else if error}
-        <div class="py-12 text-center text-red-500">{error}</div>
+        <div class="py-8 text-center text-terminal-error">{error}</div>
       {:else if filteredWords.length === 0}
-        <div class="py-12 text-center text-gray-500">暂无数据</div>
+        <div class="py-8 text-center text-terminal-text-dim">-- no data --</div>
       {:else}
-        <div class="overflow-x-auto rounded-lg bg-white shadow">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
+        <div class="border border-terminal-border">
+          <table class="table-terminal">
+            <thead>
               <tr>
-                <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                  单词
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                  美音
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                  英音
-                </th>
-                <th class="px-4 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase">
-                  操作
-                </th>
+                <th class="w-32">word</th>
+                <th class="w-48">us</th>
+                <th class="w-48">uk</th>
+                <th class="w-64 text-right">actions</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-200 bg-white">
+            <tbody>
               {#each filteredWords as word (word.id)}
-                <tr class="hover:bg-gray-50">
+                <tr>
                   <!-- 单词列 -->
-                  <td class="whitespace-nowrap px-4 py-3">
-                    <span class="font-medium text-gray-900">{word.word}</span>
+                  <td class="py-2 font-medium text-terminal-text-primary">
+                    {word.word}
                   </td>
 
                   <!-- 美音列（音标+发音） -->
-                  <td class="whitespace-nowrap px-4 py-3 text-sm">
+                  <td class="py-2 text-sm">
                     {@render ipaCell(word, 'us')}
                   </td>
 
                   <!-- 英音列（音标+发音） -->
-                  <td class="whitespace-nowrap px-4 py-3 text-sm">
+                  <td class="py-2 text-sm">
                     {@render ipaCell(word, 'uk')}
                   </td>
 
                   <!-- 操作列 -->
-                  <td class="whitespace-nowrap px-4 py-3 text-right text-sm">
-                    <button
-                      onclick={() => refreshWord(word)}
-                      disabled={refreshingWordId === word.id || uploadingAudioId === word.id}
-                      class="mr-2 text-purple-600 hover:text-purple-800 disabled:opacity-50"
-                      title="刷新音标和音频"
-                    >
-                      {refreshingWordId === word.id ? '刷新中...' : '更新'}
-                    </button>
-                    <button
-                      onclick={() => openUploadModal(word)}
-                      disabled={uploadingAudioId === word.id}
-                      class="mr-2 text-orange-600 hover:text-orange-800 disabled:opacity-50"
-                      title="上传自定义音频"
-                    >
-                      {uploadingAudioId === word.id ? '上传中...' : '上传'}
-                    </button>
-                    <button onclick={() => deleteWord(word)} class="text-red-600 hover:text-red-800">
-                      删除
-                    </button>
+                  <td class="py-2 text-right text-sm">
+                    {@render actionBtns(word)}
                   </td>
                 </tr>
               {/each}
@@ -970,32 +933,35 @@
 
     <!-- 批量导入 Modal -->
     {#if showBatchModal}
-      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div class="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
-          <h2 class="mb-4 text-lg font-bold">批量导入词汇</h2>
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div class="modal-terminal w-full max-w-lg p-4">
+          <h2 class="mb-4 text-lg font-medium text-terminal-text-primary">
+            $ <span class="text-terminal-accent">batch-import</span>
+          </h2>
           <div class="space-y-4">
             <div>
-              <label class="mb-1 block text-sm font-medium text-gray-700" for="batch-words">
-                输入单词 (每行一个)
-              </label>
+              <span class="mb-2 block text-sm text-terminal-text-secondary">
+                input words (one per line)
+              </span>
               <textarea
-                id="batch-words"
                 bind:value={batchText}
                 rows="10"
                 placeholder="coroutine&#10;async&#10;await&#10;suspend&#10;..."
-                class="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                class="input-terminal w-full px-3 py-2 font-mono text-sm resize-none placeholder:text-terminal-text-muted"
               ></textarea>
             </div>
 
             {#if batchProgress}
-              <div class="rounded-md border border-blue-200 bg-blue-50 p-3">
+              <div class="border border-terminal-border bg-terminal-bg-secondary p-3">
                 <div class="mb-2 flex items-center justify-between text-sm">
-                  <span class="text-blue-700">正在导入: {batchProgress.word}</span>
-                  <span class="font-medium text-blue-900">{batchProgress.current}/{batchProgress.total}</span>
+                  <span class="text-terminal-info">importing: {batchProgress.word}</span>
+                  <span class="font-medium text-terminal-text-secondary">
+                    {batchProgress.current}/{batchProgress.total}
+                  </span>
                 </div>
-                <div class="h-2 w-full overflow-hidden rounded-full bg-blue-200">
+                <div class="h-1 w-full bg-terminal-bg">
                   <div
-                    class="h-full bg-blue-600 transition-all duration-300"
+                    class="h-full bg-terminal-accent transition-all"
                     style="width: {(batchProgress.current / batchProgress.total) * 100}%"
                   ></div>
                 </div>
@@ -1003,15 +969,15 @@
             {/if}
 
             {#if batchResult}
-              <div class="rounded-md border p-3 {batchResult.failed.length > 0 ? 'border-yellow-300 bg-yellow-50' : 'border-green-300 bg-green-50'}">
-                <p class="font-medium">
-                  成功导入 {batchResult.success} 条
+              <div class="border p-3 {batchResult.failed.length > 0 ? 'border-terminal-warning' : 'border-terminal-accent'}">
+                <p class="font-medium {batchResult.failed.length > 0 ? 'text-terminal-warning' : 'text-terminal-accent'}">
+                  {batchResult.success} ok
                   {#if batchResult.failed.length > 0}
-                    ，失败 {batchResult.failed.length} 条
+                    , {batchResult.failed.length} failed
                   {/if}
                 </p>
                 {#if batchResult.failed.length > 0}
-                  <ul class="mt-2 max-h-32 overflow-y-auto text-sm text-red-600">
+                  <ul class="mt-2 max-h-32 overflow-y-auto text-sm text-terminal-error">
                     {#each batchResult.failed as err, i (i)}
                       <li>{err}</li>
                     {/each}
@@ -1021,21 +987,8 @@
             {/if}
 
             <div class="flex justify-end gap-3 pt-4">
-              <button
-                type="button"
-                onclick={closeBatchModal}
-                class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                关闭
-              </button>
-              <button
-                type="button"
-                onclick={importBatch}
-                disabled={batchLoading}
-                class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-              >
-                {batchLoading ? '导入中...' : '开始导入'}
-              </button>
+              {@render btn('close', closeBatchModal)}
+              {@render btn('run', importBatch, batchLoading, batchLoading)}
             </div>
           </div>
         </div>
@@ -1044,28 +997,30 @@
 
     <!-- 音频上传 Modal -->
     {#if showUploadModal}
-      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-          <h2 class="mb-4 text-lg font-bold">上传自定义音频</h2>
-          <p class="mb-4 text-sm text-gray-600">
-            为「<span class="font-medium">{uploadWord?.word}</span>」上传自定义发音
+      <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div class="modal-terminal w-full max-w-md p-4">
+          <h2 class="mb-4 text-lg font-medium text-terminal-text-primary">
+            $ <span class="text-terminal-accent">upload-audio</span>
+          </h2>
+          <p class="mb-4 text-sm text-terminal-text-secondary">
+            upload custom audio for <span class="text-terminal-text-primary">"{uploadWord?.word}"</span>
           </p>
           
           <!-- 模式切换 -->
           <div class="mb-4 flex gap-2">
             <button
               onclick={() => uploadMode = 'url'}
-              class="flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors
-                     {uploadMode === 'url' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+              class="flex-1 px-3 py-2 text-sm transition-colors
+                     {uploadMode === 'url' ? 'bg-terminal-accent text-terminal-bg' : 'btn-terminal'}"
             >
-              🔗 链接
+              url
             </button>
             <button
               onclick={() => uploadMode = 'file'}
-              class="flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors
-                     {uploadMode === 'file' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+              class="flex-1 px-3 py-2 text-sm transition-colors
+                     {uploadMode === 'file' ? 'bg-terminal-accent text-terminal-bg' : 'btn-terminal'}"
             >
-              📁 文件
+              file
             </button>
           </div>
           
@@ -1073,67 +1028,44 @@
             <!-- URL 输入模式 -->
             <div class="space-y-4">
               <div>
-                <label class="mb-1 block text-sm font-medium text-gray-700" for="audio-url">
-                  音频链接
-                </label>
+                <span class="mb-2 block text-sm text-terminal-text-secondary">
+                  audio URL
+                </span>
                 <input
-                  id="audio-url"
                   type="url"
                   bind:value={uploadUrl}
                   placeholder="https://..."
-                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                  class="input-terminal w-full px-3 py-2 text-sm placeholder:text-terminal-text-muted"
                 />
-                <p class="mt-1 text-xs text-gray-500">支持 MP3、WAV、WebM、OGG 格式的音频链接</p>
+                <p class="mt-1 text-xs text-terminal-text-muted">
+                  supports: MP3, WAV, WebM, OGG
+                </p>
               </div>
               
               {#if uploadError}
-                <p class="text-sm text-red-600">{uploadError}</p>
+                <p class="text-sm text-terminal-error">{uploadError}</p>
               {/if}
               
               <div class="flex justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onclick={closeUploadModal}
-                  class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onclick={uploadAudioByUrl}
-                  disabled={uploadLoading}
-                  class="rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
-                >
-                  {uploadLoading ? '上传中...' : '确认上传'}
-                </button>
+                {@render btn('cancel', closeUploadModal)}
+                {@render btn('upload', uploadAudioByUrl, uploadLoading, uploadLoading)}
               </div>
             </div>
           {:else}
             <!-- 文件上传模式 -->
             <div class="space-y-4">
-              <div class="rounded-md border-2 border-dashed border-gray-300 p-6 text-center">
-                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <p class="mt-2 text-sm text-gray-600">点击选择音频文件</p>
-                <p class="mt-1 text-xs text-gray-500">支持 MP3、WAV、WebM、OGG（最大 10MB）</p>
-                <button
-                  type="button"
-                  onclick={() => uploadWord && triggerUploadFile(uploadWord)}
-                  class="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  选择文件
-                </button>
+              <div class="border border-dashed border-terminal-border p-6 text-center">
+                <p class="mb-4 text-sm text-terminal-text-secondary">
+                  click to select audio file
+                </p>
+                <p class="mb-4 text-xs text-terminal-text-muted">
+                  MP3, WAV, WebM, OGG (max 10MB)
+                </p>
+                {@render btn('select file', () => uploadWord && triggerUploadFile(uploadWord))}
               </div>
               
               <div class="flex justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onclick={closeUploadModal}
-                  class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  取消
-                </button>
+                {@render btn('cancel', closeUploadModal)}
               </div>
             </div>
           {/if}
@@ -1142,22 +1074,3 @@
     {/if}
   </div>
 {/if}
-
-<style>
-  /* Toast 动画 */
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .animate-fade-in {
-    animation: fade-in 0.3s ease-out;
-  }
-</style>
-

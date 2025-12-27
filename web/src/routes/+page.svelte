@@ -81,29 +81,38 @@
   {@const active = isPlaying(word, accent)}
   {#if ipaText}
     {#if hasAudio}
-      <button onclick={() => play(word, accent)} class="ipa {active ? 'on' : ''}">
+      <button 
+        onclick={() => play(word, accent)} 
+        class="bg-transparent border-none p-0 font-mono text-terminal-accent cursor-pointer hover:text-terminal-accent-hover {active ? 'text-terminal-accent-active' : ''}"
+      >
         [{isUs ? 'US' : 'UK'}] /{ipaText}/{active ? ' ▮▮' : ''}
       </button>
     {:else}
-      <span class="ipa dim">[{isUs ? 'US' : 'UK'}] /{ipaText}/</span>
+      <span class="text-terminal-disabled cursor-default">[{isUs ? 'US' : 'UK'}] /{ipaText}/</span>
     {/if}
   {/if}
 {/snippet}
 
 <svelte:head><title>pron</title></svelte:head>
 
-<div class="term">
-  <header>
-    <span class="prompt">$</span>
-    <input type="text" placeholder="grep ..." value={searchQuery} oninput={search}/>
-    <span class="count">{total} entries</span>
+<div class="min-h-screen bg-terminal-bg text-terminal-text-secondary font-mono text-[13px] leading-relaxed">
+  <header class="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 bg-terminal-bg-secondary border-b border-terminal-border">
+    <span class="text-terminal-accent">$</span>
+    <input 
+      type="text" 
+      placeholder="grep ..." 
+      value={searchQuery} 
+      oninput={search}
+      class="flex-1 bg-transparent border-none outline-none text-terminal-text-primary font-mono caret-terminal-accent placeholder:text-terminal-text-muted"
+    />
+    <span class="text-terminal-text-dim text-xs">{total} entries</span>
   </header>
 
-  <main>
+  <main class="bg-terminal-bg max-w-7xl mx-auto px-4 py-2 h-[calc(100vh-42px)] flex flex-col">
     {#if !isInitialized}
-      <p class="msg">loading...</p>
+      <p class="text-terminal-text-muted py-4 text-center">loading...</p>
     {:else if !words.length}
-      <p class="msg">no match{searchQuery ? ` for "${searchQuery}"` : ''}</p>
+      <p class="text-terminal-text-muted py-4 text-center">no match{searchQuery ? ` for "${searchQuery}"` : ''}</p>
     {:else}
       <VirtualList
         items={words}
@@ -112,73 +121,28 @@
         columns={1}
         columnBreakpoints={{ 768: 2 }}
         height="100%"
-        class="flex-1"
+        class="flex-1 min-h-0"
         onScrollEnd={() => !isLoading && hasMore && load()}
         getKey={(w) => w.id}
       >
         {#snippet children({ item: word })}
-          <div class="row">
-            <span class="w">{word.word}</span>
+          <div class="flex items-baseline gap-4 h-full py-1 border-b border-terminal-border-light hover:bg-terminal-bg-secondary">
+            <span class="text-terminal-text-primary min-w-[10ch]">{word.word}</span>
             {@render ipa(word, 'us')}
             {@render ipa(word, 'uk')}
           </div>
         {/snippet}
       </VirtualList>
-      {#if isLoading}<p class="msg">...</p>{/if}
-      {#if !hasMore}<p class="msg">-- EOF --</p>{/if}
+      {#if isLoading}<p class="text-terminal-text-muted py-4 text-center">...</p>{/if}
+      {#if !hasMore}<p class="text-terminal-text-muted py-4 text-center">-- EOF --</p>{/if}
     {/if}
   </main>
 </div>
 
 <style>
-  :global(html, body) { background: #1a1a1a; }
-  .term {
-    min-height: 100vh;
-    background: #1a1a1a;
-    color: #b0b0b0;
-    font: 13px/1.6 ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  main :global(.virtual-list-container) {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
-  header {
-    position: sticky; top: 0; z-index: 10;
-    display: flex; align-items: center; gap: .5rem;
-    padding: .5rem 1rem;
-    background: #222; border-bottom: 1px solid #333;
-  }
-  .prompt { color: #6a9955; }
-  header input {
-    flex: 1; background: none; border: none; outline: none;
-    color: #e0e0e0; font: inherit; caret-color: #6a9955;
-  }
-  header input::placeholder { color: #555; }
-  .count { color: #666; font-size: 12px; }
-
-  main {
-    background: #1a1a1a;
-    max-width: 80rem; margin: auto; padding: .5rem 1rem;
-    height: calc(100vh - 42px);
-    display: flex; flex-direction: column;
-  }
-  main :global(.flex-1) { flex: 1; min-height: 0; }
-    main :global(.virtual-list-container) {
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-    }
-    main :global(.virtual-list-container)::-webkit-scrollbar { display: none; }
-
-  .msg { color: #555; padding: 1rem 0; text-align: center; }
-
-  .row {
-    display: flex; align-items: baseline; gap: 1rem; height: 100%;
-    padding: .25rem 0; border-bottom: 1px solid #262626;
-  }
-  .row:hover { background: #222; }
-  .w { color: #e0e0e0; min-width: 10ch; }
-
-  .ipa {
-    background: none; border: none; padding: 0; font: inherit;
-    color: #6a9955; cursor: pointer;
-  }
-  .ipa:hover { color: #8bc36a; }
-  .ipa.on { color: #b5cea8; }
-  .ipa.dim { color: #444; cursor: default; }
+  main :global(.virtual-list-container)::-webkit-scrollbar { display: none; }
 </style>
