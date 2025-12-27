@@ -17,6 +17,8 @@ interface WordInsert {
   word: string;
   ipa?: string | null;
   audio_url?: string | null;
+  ipa_uk?: string | null;
+  audio_url_uk?: string | null;
 }
 
 interface WordUpdate extends Partial<WordInsert> {}

@@ -1,4 +1,102 @@
-# 同步语音合成 HTTP
+# 语音合成 API 文档
+
+本文档包含两个语音合成服务：
+1. **Eudic (frdic.com)** - 真人发音，支持美音和英音
+2. **MiniMax T2A** - AI 生成发音
+
+---
+
+## 1. Eudic 真人发音 API
+
+### API 端点
+
+```
+POST /api/tts
+```
+
+### 请求参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| word | string | 是 | - | 要生成音频的单词 |
+| mode | string | 否 | `single` | 模式：`single`（单一口音）或 `both`（同时生成美音和英音） |
+| accent | string | 否 | `us` | 口音：`us`（美音）或 `uk`（英音），仅 mode 为 `single` 时有效 |
+| provider | string | 否 | `frdic` | 发音源：`frdic`（真人）或 `minimax`（AI） |
+
+### voicename 说明
+
+Eudic API 的 `voicename` 参数主要用于区分口音，而非性别：
+
+| voicename | 口音 | 说明 |
+|-----------|------|------|
+| `en_us_female` | 美音 | US English Female |
+| `en_uk_male` | 英音 | UK English Male |
+
+### 请求示例
+
+```bash
+# 美音（默认，单一模式）
+curl -X POST http://localhost:5173/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"word": "hello", "accent": "us"}'
+
+# 英音
+curl -X POST http://localhost:5173/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"word": "hello", "accent": "uk"}'
+
+# 同时生成美音和英音（推荐）
+curl -X POST http://localhost:5173/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"word": "hello", "mode": "both"}'
+
+# 使用 MiniMax AI 发音
+curl -X POST http://localhost:5173/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"word": "hello", "provider": "minimax"}'
+```
+
+### 响应示例
+
+**单一模式** (`mode: "single"` 或默认):
+
+```json
+{
+  "success": true,
+  "audio_url": "https://bucket.onecat.dev/hello_us_1735313400000.mp3",
+  "audio_size": 12345,
+  "accent": "us",
+  "provider": "frdic",
+  "mode": "single"
+}
+```
+
+**双语音模式** (`mode: "both"`):
+
+```json
+{
+  "success": true,
+  "audio_url": "https://bucket.onecat.dev/hello_us_1735313400001.mp3",
+  "audio_url_uk": "https://bucket.onecat.dev/hello_uk_1735313400002.mp3",
+  "audio_size": 12345,
+  "audio_size_uk": 12367,
+  "provider": "frdic",
+  "mode": "both"
+}
+```
+
+### Eudic 直接调用
+
+```
+https://api.frdic.com/api/v2/speech/speakweb?langid=en&voicename=en_us_female&txt=QYNc2NoZW1l
+https://api.frdic.com/api/v2/speech/speakweb?langid=en&voicename=en_uk_male&txt=QYNc2NoZW1l
+```
+
+其中 `txt` 参数格式为：`QYN` + Base64编码的文本
+
+---
+
+## 2. MiniMax TTS API
 
 > 使用本接口，在HTTP网络通信协议下进行同步语音合成。
 

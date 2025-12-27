@@ -1,6 +1,7 @@
 /**
- * TTS API 路由 - 支持多种发音源
+ * TTS API 路由 - 支持多种发音源和口音
  * 优先使用 frdic.com 真人发音，备用 MiniMax AI 发音
+ * 支持美音 (us) 和英音 (uk)
  */
 
 import { json } from '@sveltejs/kit';
@@ -15,8 +16,14 @@ import {
 } from '$env/static/private';
 import type { RequestHandler } from './$types';
 
-// frdic.com 真人发音 API（美音）
+// frdic.com 真人发音 API
 const FRDIC_TTS_URL = 'https://api.frdic.com/api/v2/speech/speakweb';
+
+// voicename 映射：区分 us (美音) 和 uk (英音)
+const FRDIC_VOICENAME: Record<string, string> = {
+    us: 'en_us_female',
+    uk: 'en_uk_male',
+};
 
 // MiniMax T2A API 端点
 const MINIMAX_T2A_URL = 'https://api.minimaxi.com/v1/t2a_v2';
@@ -72,12 +79,21 @@ async function uploadToR2(audioData: Uint8Array, filename: string): Promise<stri
 
 /**
  * 从 frdic.com 获取真人发音音频
+ * @param word - 单词
+ * @param accent - 口音，'us' 为美音，'uk' 为英音
+ * @param encodedTxt - 已编码的文本（从欧路词典提取），如果提供则直接使用
  */
-async function fetchAudioFromFrdic(word: string): Promise<Uint8Array> {
-    const encodedWord = encodeWordToFrdic(word);
-    const url = `${FRDIC_TTS_URL}?langid=en&voicename=en_us_female&txt=${encodedWord}`;
+async function fetchAudioFromFrdic(
+    word: string,
+    accent: string = 'us',
+    encodedTxt?: string
+): Promise<Uint8Array> {
+    // 如果提供了已编码的 txt，直接使用；否则自行编码
+    const txt = encodedTxt || encodeWordToFrdic(word);
+    const voicename = FRDIC_VOICENAME[accent] || FRDIC_VOICENAME['us'];
+    const url = `${FRDIC_TTS_URL}?langid=en&voicename=${voicename}&txt=${txt}`;
 
-    console.log(`[TTS] Fetching audio from frdic: ${url}`);
+    console.log(`[TTS] Fetching audio from frdic: accent=${accent}, url=${url}`);
 
     const response = await fetch(url, {
         headers: {
@@ -157,18 +173,24 @@ async function fetchAudioFromMiniMax(text: string): Promise<Uint8Array> {
 }
 
 /**
- * 生成音频（支持多种发音源）
+ * 生成音频（支持多种发音源和口音）
+ * @param text - 要生成音频的文本
+ * @param accent - 口音，'us' 为美音，'uk' 为英音
+ * @param provider - 发音源，'frdic'（默认，真人）或 'minimax'（AI）
+ * @param encodedTxt - 已编码的文本（从欧路词典提取）
  */
-async function generateAudio(text: string, provider: 'frdic' | 'minimax' = 'frdic'): Promise<{ audioUrl: string; audioSize: number }> {
-    // 根据 provider 获取音频
+async function generateAudio(
+    text: string,
+    accent: string = 'us',
+    provider: 'frdic' | 'minimax' = 'frdic',
+    encodedTxt?: string
+): Promise<{ audioUrl: string; audioSize: number }> {
     const audioData = provider === 'frdic'
-        ? await fetchAudioFromFrdic(text)
+        ? await fetchAudioFromFrdic(text, accent, encodedTxt)
         : await fetchAudioFromMiniMax(text);
 
-    // 生成文件名
-    const filename = `${text.toLowerCase()}_${Date.now()}.mp3`;
+    const filename = `${text.toLowerCase()}_${accent}_${Date.now()}.mp3`;
 
-    // 上传到 R2
     const audioUrl = await uploadToR2(audioData, filename);
 
     return {
@@ -177,11 +199,42 @@ async function generateAudio(text: string, provider: 'frdic' | 'minimax' = 'frdi
     };
 }
 
+/**
+ * 同时生成美音和英音音频
+ * @param text - 要生成音频的文本
+ * @param provider - 发音源，'frdic'（默认，真人）或 'minimax'（AI）
+ * @param encodedTxt - 已编码的文本（从欧路词典提取）
+ */
+async function generateBothAudios(
+    text: string,
+    provider: 'frdic' | 'minimax' = 'frdic',
+    encodedTxt?: string
+): Promise<{ audioUrlUs: string; audioUrlUk: string; audioSizeUs: number; audioSizeUk: number }> {
+    console.log(`[TTS] Generating both US and UK audio for word: ${text}, provider: ${provider}`);
+
+    // 并行获取美音和英音（两者使用相同的 encodedTxt）
+    const [resultUs, resultUk] = await Promise.all([
+        generateAudio(text, 'us', provider, encodedTxt),
+        generateAudio(text, 'uk', provider, encodedTxt),
+    ]);
+
+    console.log(`[TTS] Both audios generated: us=${resultUs.audioUrl}, uk=${resultUk.audioUrl}`);
+
+    return {
+        audioUrlUs: resultUs.audioUrl,
+        audioUrlUk: resultUk.audioUrl,
+        audioSizeUs: resultUs.audioSize,
+        audioSizeUk: resultUk.audioSize,
+    };
+}
+
 // POST - 生成音频
+// 请求体: { word: string, mode?: 'single' | 'both', accent?: 'us' | 'uk', provider?: 'frdic' | 'minimax', txt?: string }
+// txt: 从欧路词典提取的已编码文本，如果提供则直接使用，无需再次编码
 export const POST: RequestHandler = async ({ request }) => {
     try {
         const body = await request.json();
-        const { word, provider } = body;
+        const { word, mode, accent, provider, txt } = body;
 
         if (!word) {
             return json({ error: 'word is required' }, { status: 400 });
@@ -190,9 +243,29 @@ export const POST: RequestHandler = async ({ request }) => {
         // 支持指定发音源：frdic（默认，真人）或 minimax（AI）
         const ttsProvider: 'frdic' | 'minimax' = provider === 'minimax' ? 'minimax' : 'frdic';
 
-        console.log(`[TTS] Generating audio for word: ${word}, provider: ${ttsProvider}`);
+        // mode 为 'both' 时，同时生成美音和英音
+        if (mode === 'both') {
+            console.log(`[TTS] Generating both audios for word: ${word}, provider: ${ttsProvider}, txt: ${txt ? 'provided' : 'auto'}`);
 
-        const result = await generateAudio(word, ttsProvider);
+            const result = await generateBothAudios(word, ttsProvider, txt);
+
+            return json({
+                success: true,
+                audio_url: result.audioUrlUs,
+                audio_url_uk: result.audioUrlUk,
+                audio_size: result.audioSizeUs,
+                audio_size_uk: result.audioSizeUk,
+                mode: 'both',
+                provider: ttsProvider,
+            });
+        }
+
+        // 单一口音模式（默认美音）
+        const audioAccent: string = accent === 'uk' ? 'uk' : 'us';
+
+        console.log(`[TTS] Generating audio for word: ${word}, accent: ${audioAccent}, provider: ${ttsProvider}, txt: ${txt ? 'provided' : 'auto'}`);
+
+        const result = await generateAudio(word, audioAccent, ttsProvider, txt);
 
         console.log(`[TTS] Audio generated successfully: ${result.audioUrl}`);
 
@@ -200,7 +273,9 @@ export const POST: RequestHandler = async ({ request }) => {
             success: true,
             audio_url: result.audioUrl,
             audio_size: result.audioSize,
+            accent: audioAccent,
             provider: ttsProvider,
+            mode: 'single',
         });
     } catch (e) {
         console.error('[TTS] Error:', e);

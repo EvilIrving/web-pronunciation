@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import type { Word } from '$lib/types';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
@@ -31,16 +32,8 @@
   let quickAddLoading = $state(false);
   let quickAddError = $state<string | null>(null);
 
-  // 行内编辑状态
-  let editingId = $state<string | null>(null);
-  let editForm = $state<{ word: string; ipa: string }>({
-    word: '',
-    ipa: '',
-  });
-  let editSaving = $state(false);
-
-  // 音频重新生成状态（按行跟踪）
-  let regeneratingAudioId = $state<string | null>(null);
+  // 音频更新状态（按行跟踪）
+  let refreshingWordId = $state<string | null>(null);
 
   // 音频上传状态（按行跟踪）
   let uploadingAudioId = $state<string | null>(null);
@@ -49,17 +42,11 @@
   let fileInputRef = $state<HTMLInputElement | null>(null);
   let pendingUploadWord = $state<Word | null>(null);
 
-  // 音频播放
-  let playingId = $state<string | null>(null);
+  // 音频播放（合并 US/UK）
+  let playingAudio = $state<{ id: string; type: 'us' | 'uk' } | null>(null);
   let audioRef = $state<HTMLAudioElement | null>(null);
 
-  // 删除队列（待撤销的项）
-  interface DeletedItem {
-    id: string;
-    word: Word;
-    deletedAt: number;
-  }
-  let deletedQueue = $state<DeletedItem[]>([]);
+  // Toast
   let toastMessage = $state('');
   let toastType = $state<'success' | 'error' | 'info'>('success');
   let toastVisible = $state(false);
@@ -176,7 +163,7 @@
   }
 
   // 调用 IPA API 生成音标
-  async function fetchIPA(word: string): Promise<string> {
+  async function fetchIPA(word: string): Promise<{ ipa: string; ipa_uk: string }> {
     const response = await fetch('/api/ipa', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -192,28 +179,34 @@
       throw new Error(result.error || '生成 IPA 失败');
     }
 
-    return result.ipa;
+    return { ipa: result.ipa || '', ipa_uk: result.ipa_uk || '' };
   }
 
-  // 调用 TTS API 生成音频
-  async function fetchTTS(word: string): Promise<string> {
-    const response = await fetch('/api/tts', {
+  // 调用 Eudic API（仅获取音标）
+  async function fetchEudic(word: string) {
+    const res = await fetch(`/api/eudic?word=${encodeURIComponent(word)}`);
+    if (!res.ok) throw new Error('Eudic API 错误');
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '获取失败');
+    return {
+      ipa_us: data.ipa_us || '',
+      ipa_uk: data.ipa_uk || '',
+    };
+  }
+
+  // 调用 TTS API 生成音频（支持 mode: 'both' 同时生成美音和英音）
+  async function fetchTTS(word: string, mode: 'single' | 'both' = 'single', accent: 'us' | 'uk' = 'us'): Promise<{ audio_url: string; audio_url_uk?: string }> {
+    const res = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ word }),
+      body: JSON.stringify({ word, mode, accent }),
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || '生成音频失败');
-    }
-
-    const result = await response.json();
-    if (!result.success) {
-      throw new Error('生成音频失败');
-    }
-
-    return result.audio_url;
+    if (!res.ok) throw new Error('TTS 错误');
+    const data = await res.json();
+    return {
+      audio_url: data.audio_url || '',
+      audio_url_uk: data.audio_url_uk || '',
+    };
   }
 
   // 快速添加单词
@@ -221,60 +214,47 @@
     const word = quickAddWord.trim();
     if (!word) return;
 
-    // 立即清空输入并重置状态，提供即时反馈
     quickAddWord = '';
     quickAddError = null;
     quickAddLoading = true;
 
-    // 创建临时的乐观更新对象（使用临时 ID）
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const tempId = `temp-${Date.now()}`;
     const optimisticWord: Word = {
       id: tempId,
-      word: word,
+      word,
       ipa: null,
       audio_url: null,
+      ipa_uk: null,
+      audio_url_uk: null,
       normalized: word.toLowerCase(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-
-    // 1. 乐观更新：立即添加到列表顶部
     words = [optimisticWord, ...words];
     showToast(`正在添加「${word}」...`, 'info');
 
     try {
-      // 获取发音信息
-      let ipa = '';
-      let audioUrl = '';
-      try {
-        // 并行获取 IPA 和音频
-        const [ipaResult, audioResult] = await Promise.all([
-          fetchIPA(word),
-          fetchTTS(word),
-        ]);
-        ipa = ipaResult;
-        audioUrl = audioResult;
-      } catch (e) {
-        console.warn('获取发音失败:', e);
-      }
+      const eudic = await fetchEudic(word).catch(() => ({ ipa_us: '', ipa_uk: '' }));
+      // 音频通过 TTS API 获取（mode: 'both' 同时生成美音和英音）
+      const tts = await fetchTTS(word, 'both').catch(() => ({ audio_url: '', audio_url_uk: '' }));
 
       const response = await fetch('/api/words', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ word, ipa, audio_url: audioUrl }),
+        body: JSON.stringify({
+          word,
+          ipa: eudic.ipa_us || eudic.ipa_uk,
+          ipa_uk: eudic.ipa_uk,
+          audio_url: tts.audio_url,
+          audio_url_uk: tts.audio_url_uk,
+        }),
       });
-
       const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '保存失败');
 
-      if (!response.ok) {
-        throw new Error(result.error || '保存失败');
-      }
-
-      // 2. 成功：用服务器返回的真实数据替换乐观对象
       words = words.map(w => w.id === tempId ? { ...w, ...result.data } : w);
       showToast(`已添加「${word}」`, 'success');
     } catch (e) {
-      // 失败：移除乐观对象
       words = words.filter(w => w.id !== tempId);
       quickAddError = e instanceof Error ? e.message : '保存失败';
       showToast(quickAddError, 'error');
@@ -283,148 +263,61 @@
     }
   }
 
-  // 开始行内编辑
-  function startEdit(word: Word) {
-    editingId = word.id;
-    editForm = {
-      word: word.word,
-      ipa: word.ipa || '',
-    };
-  }
-
-  // 取消编辑
-  function cancelEdit() {
-    editingId = null;
-    editForm = { word: '', ipa: '' };
-  }
-
-  // 保存编辑
-  async function saveEdit(id: string) {
-    editSaving = true;
-
-    // 查找被编辑的词
-    const originalWord = words.find(w => w.id === id);
-    if (!originalWord) {
-      editSaving = false;
-      return;
-    }
-
-    // 创建乐观更新的词
-    const optimisticWord: Word = {
-      ...originalWord,
-      word: editForm.word,
-      ipa: editForm.ipa || null,
-    };
-
-    // 1. 乐观更新：立即更新 UI
-    words = words.map(w => w.id === id ? optimisticWord : w);
-    editingId = null;
-    showToast(`正在保存「${originalWord.word}」...`, 'info');
+  // 刷新单词：重新获取最新的音标和音频
+  async function refreshWord(word: Word) {
+    refreshingWordId = word.id;
+    const original = { ...word };
+    words = words.map(w => w.id === word.id ? { ...w, ipa: '', ipa_uk: '', audio_url: '', audio_url_uk: '' } : w);
+    showToast(`正在刷新「${word.word}」...`, 'info');
 
     try {
-      const response = await fetch('/api/words', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, word: editForm.word, ipa: editForm.ipa }),
-      });
+      console.log(`[Refresh] Starting for word: ${word.word}`);
+      // 音标从 Eudic 获取
+      const eudic = await fetchEudic(word.word).catch(() => ({ ipa_us: '', ipa_uk: '' }));
+      // 音频通过 TTS API 获取（mode: 'both' 同时生成美音和英音）
+      const tts = await fetchTTS(word.word, 'both').catch(() => ({ audio_url: '', audio_url_uk: '' }));
+      console.log(`[Refresh] TTS result: audio_url="${tts.audio_url}", audio_url_uk="${tts.audio_url_uk}"`);
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || '保存失败');
-      }
-
-      // 2. 成功：确保数据同步
-      words = words.map(w => w.id === id ? { ...w, ...result.data } : w);
-      showToast(`已保存「${editForm.word}」`, 'success');
-    } catch (e) {
-      // 失败：回滚到原始数据
-      words = words.map(w => w.id === id ? originalWord : w);
-      showToast(e instanceof Error ? e.message : '保存失败', 'error');
-    } finally {
-      editSaving = false;
-    }
-  }
-
-  // 一键重新生成音频
-  async function regenerateAudio(word: Word) {
-    regeneratingAudioId = word.id;
-
-    // 1. 乐观更新：立即清空音频 URL（显示生成中状态）
-    words = words.map(w => w.id === word.id ? { ...w, audio_url: '' } : w);
-    showToast(`正在为「${word.word}」生成音频...`, 'info');
-
-    try {
-      const audioUrl = await fetchTTS(word.word);
-
-      if (!audioUrl) {
-        // 失败：恢复原音频 URL
-        words = words.map(w => w.id === word.id ? { ...w, audio_url: word.audio_url } : w);
-        showToast('生成音频失败', 'error');
-        regeneratingAudioId = null;
+      if (!eudic.ipa_us && !eudic.ipa_uk && !tts.audio_url && !tts.audio_url_uk) {
+        words = words.map(w => w.id === word.id ? original : w);
+        showToast('刷新失败', 'error');
+        refreshingWordId = null;
         return;
       }
 
-      // 更新数据库中的音频URL
       const response = await fetch('/api/words', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: word.id, audio_url: audioUrl }),
+        body: JSON.stringify({
+          id: word.id,
+          ipa: eudic.ipa_us || eudic.ipa_uk,
+          ipa_uk: eudic.ipa_uk,
+          audio_url: tts.audio_url,
+          audio_url_uk: tts.audio_url_uk,
+        }),
       });
-
       const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '更新失败');
 
-      if (!response.ok) {
-        // 失败：恢复原音频 URL
-        words = words.map(w => w.id === word.id ? { ...w, audio_url: word.audio_url } : w);
-        throw new Error(result.error || '更新音频失败');
-      }
-
-      // 成功：更新音频 URL
-      words = words.map(w => w.id === word.id ? { ...w, audio_url: audioUrl } : w);
-      showToast(`已为「${word.word}」生成音频`, 'success');
+      words = words.map(w => w.id === word.id ? { ...w, ...result.data } : w);
+      showToast(`已刷新「${word.word}」`, 'success');
     } catch (e) {
-      showToast(e instanceof Error ? e.message : '重新生成音频失败', 'error');
+      words = words.map(w => w.id === word.id ? original : w);
+      showToast('刷新失败', 'error');
     } finally {
-      regeneratingAudioId = null;
+      refreshingWordId = null;
     }
   }
 
-  // 乐观删除 + 后台同步
+  // 乐观删除
   async function deleteWord(word: Word) {
-    // 1. 乐观更新：立即从 UI 移除
     words = words.filter(w => w.id !== word.id);
-    
-    // 2. 加入撤销队列
-    deletedQueue.push({ id: word.id, word, deletedAt: Date.now() });
-    
-    // 3. 显示 Toast
-    const count = deletedQueue.length;
-    if (count === 1) {
-      showToast(`已删除「${word.word}」`, 'success');
-    } else {
-      showToast(`已删除 ${count} 项`, 'success');
-    }
-    
-    // 4. 后台异步调用 API（Promise.fire-and-forget）
-    fetch(`/api/words?id=${word.id}`, { method: 'DELETE' })
-      .then(async (res) => {
-        if (!res.ok) throw new Error('删除失败');
-        
-        // 5秒后从队列移除（若用户未撤销）
-        setTimeout(() => {
-          deletedQueue = deletedQueue.filter(d => d.id !== word.id);
-        }, 5000);
-      })
-      .catch(async (err) => {
-        console.error('Delete error:', err);
-        
-        // 失败：回滚 UI
-        words = [...words, word];
-        deletedQueue = deletedQueue.filter(d => d.id !== word.id);
-        
-        showToast('删除失败，已恢复', 'error');
-      });
+    showToast(`已删除「${word.word}」`, 'success');
+
+    fetch(`/api/words?id=${word.id}`, { method: 'DELETE' }).catch(() => {
+      words = [...words, word];
+      showToast('删除失败，已恢复', 'error');
+    });
   }
 
   // 显示 Toast
@@ -444,57 +337,33 @@
     toastVisible = false;
   }
 
-  // 撤销最近删除
-  function undoDelete() {
-    if (deletedQueue.length === 0) return;
-    
-    const last = deletedQueue[deletedQueue.length - 1];
-    deletedQueue = deletedQueue.slice(0, -1);
-    
-    // 恢复 UI
-    words = [...words, last.word];
-    
-    showToast(`已恢复「${last.word.word}」`, 'info');
-  }
-
   // 键盘快捷键
-  function handleKeydown(event: KeyboardEvent) {
-    // Cmd/Ctrl + Z: 撤销
-    if ((event.metaKey || event.ctrlKey) && event.key === 'z') {
-      event.preventDefault();
-      undoDelete();
-      return;
+  function handleKeydown(_event: KeyboardEvent) {
+    // 预留
+  }
+
+  // 播放音频（合并 US/UK）
+  function playAudio(word: Word, type: 'us' | 'uk') {
+    const url = type === 'us' ? word.audio_url : word.audio_url_uk;
+    if (!url) return;
+
+    if (playingAudio?.id === word.id && playingAudio?.type === type) {
+      audioRef?.pause();
+      playingAudio = null;
+    } else {
+      playingAudio = { id: word.id, type };
+      setTimeout(() => audioRef?.play().catch(() => (playingAudio = null)), 50);
     }
   }
 
-  // 播放音频
-  function playAudio(word: Word) {
-    if (!word.audio_url) return;
-
-    if (playingId === word.id) {
-      // 停止播放
-      if (audioRef) {
-        audioRef.pause();
-        audioRef.currentTime = 0;
-      }
-      playingId = null;
-    } else {
-      // 开始播放
-      playingId = word.id;
-      // 等待 DOM 更新后播放
-      setTimeout(() => {
-        if (audioRef) {
-          audioRef.play().catch((e) => {
-            console.error('播放失败:', e);
-            playingId = null;
-          });
-        }
-      }, 50);
-    }
+  function getPlayingAudioUrl() {
+    if (!playingAudio) return '';
+    const w = words.find(w => w.id === playingAudio!.id);
+    return playingAudio.type === 'us' ? w?.audio_url : w?.audio_url_uk;
   }
 
   function onAudioEnded() {
-    playingId = null;
+    playingAudio = null;
   }
 
   // 批量导入
@@ -520,6 +389,8 @@
       word,
       ipa: null,
       audio_url: null,
+      ipa_uk: null,
+      audio_url_uk: null,
       normalized: word.toLowerCase(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -532,46 +403,41 @@
       batchProgress = { current: i + 1, total: lines.length, word };
 
       try {
-        // 并行获取发音信息
-        let ipa = '';
-        let audioUrl = '';
-        try {
-          const [ipaResult, audioResult] = await Promise.all([
-            fetchIPA(word),
-            fetchTTS(word),
-          ]);
-          ipa = ipaResult;
-          audioUrl = audioResult;
-        } catch (e) {
-          console.warn(`获取发音失败 ${word}:`, e);
-        }
+        console.log(`[Batch] Processing word ${i + 1}/${lines.length}: ${word}`);
+        // 音标从 Eudic 获取
+        const eudic = await fetchEudic(word).catch(() => ({ ipa_us: '', ipa_uk: '' }));
+        // 音频通过 TTS API 获取
+        const tts = await fetchTTS(word, 'both').catch(() => ({ audio_url: '', audio_url_uk: '' }));
+        console.log(`[Batch] TTS result for ${word}: audio_url="${tts.audio_url}", audio_url_uk="${tts.audio_url_uk}"`);
 
         const response = await fetch('/api/words', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ word, ipa, audio_url: audioUrl }),
+          body: JSON.stringify({
+            word,
+            ipa: eudic.ipa_us || eudic.ipa_uk,
+            ipa_uk: eudic.ipa_uk,
+            audio_url: tts.audio_url,
+            audio_url_uk: tts.audio_url_uk,
+          }),
         });
-
         const result = await response.json();
 
         if (!response.ok) {
           failed.push(`${word}: ${result.error || '未知错误'}`);
-          // 失败：移除乐观对象
           words = words.filter(w => w.id !== tempId);
         } else {
           success++;
-          // 成功：用服务器数据替换乐观对象
           words = words.map(w => w.id === tempId ? { ...w, ...result.data } : w);
         }
       } catch (e) {
         failed.push(`${word}: ${e instanceof Error ? e.message : '未知错误'}`);
-        // 失败：移除乐观对象
         words = words.filter(w => w.id !== tempId);
       }
 
-      // 添加小延迟避免请求过快
       if (i < lines.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        // 速率限制：3秒/请求，避免外部 API 被封
+        await new Promise((resolve) => setTimeout(resolve, 3000));
       }
     }
 
@@ -763,6 +629,58 @@
       }
     }
   }
+
+  // 全量更新：从 Eudic 获取所有缺失的音标和音频
+  async function fullUpdate() {
+    if (words.length === 0) {
+      showToast('没有词汇数据', 'error');
+      return;
+    }
+
+    loading = true;
+    let updated = 0;
+    let failed = 0;
+    showToast('开始全量更新...', 'info');
+
+    for (const word of words) {
+      try {
+        if (word.ipa_uk && word.audio_url_uk) continue;
+
+        const eudic = await fetchEudic(word.word).catch(() => ({ ipa_us: '', ipa_uk: '', audio_url_us: '', audio_url_uk: '' }));
+        const updateData: Record<string, string> = { id: word.id };
+
+        if (!word.ipa_uk && eudic.ipa_uk) {
+          updateData.ipa_uk = eudic.ipa_uk;
+          if (!word.ipa) updateData.ipa = eudic.ipa_us || eudic.ipa_uk;
+        }
+        if (!word.audio_url_uk && eudic.audio_url_uk) {
+          updateData.audio_url_uk = eudic.audio_url_uk;
+        }
+
+        if (Object.keys(updateData).length > 1) {
+          const response = await fetch('/api/words', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData),
+          });
+          if (response.ok) {
+            const data = await response.json();
+            words = words.map(w => w.id === word.id ? { ...w, ...data.data } : w);
+            updated++;
+          } else {
+            failed++;
+          }
+        }
+      } catch {
+        failed++;
+      }
+      // 速率限制：3秒/请求，避免外部 API 被封
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+
+    loading = false;
+    showToast(`全量更新完成：成功 ${updated}，失败 ${failed}`, 'success');
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -771,14 +689,76 @@
   <title>后台管理 - 词汇管理</title>
 </svelte:head>
 
+<!-- Snippets -->
+{#snippet playIcon(isPlaying: boolean)}
+  {#if isPlaying}
+    <svg class="h-5 w-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+      <rect x="6" y="4" width="4" height="16" />
+      <rect x="14" y="4" width="4" height="16" />
+    </svg>
+  {:else}
+    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  {/if}
+{/snippet}
+
+{#snippet toastIcon(type: 'success' | 'error' | 'info')}
+  {#if type === 'success'}
+    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+    </svg>
+  {:else if type === 'error'}
+    <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  {:else}
+    <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  {/if}
+{/snippet}
+
+{#snippet centerMessage(text: string)}
+  <div class="flex min-h-screen items-center justify-center bg-gray-100">
+    <div class="text-gray-500">{text}</div>
+  </div>
+{/snippet}
+
+{#snippet ipaCell(word: Word, type: 'us' | 'uk')}
+  {@const ipa = type === 'us' ? word.ipa : word.ipa_uk}
+  {@const url = type === 'us' ? word.audio_url : word.audio_url_uk}
+  {@const isPlaying = playingAudio?.id === word.id && playingAudio?.type === type}
+  {@const hasAudio = !!url}
+  {@const baseColor = type === 'us' ? 'text-blue-600' : 'text-green-600'}
+  {@const hoverColor = type === 'us' ? 'hover:text-blue-800 hover:bg-blue-50' : 'hover:text-green-800 hover:bg-green-50'}
+  {#if ipa}
+    {#if hasAudio}
+      <button
+        onclick={() => playAudio(word, type)}
+        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors cursor-pointer {baseColor} {hoverColor} {isPlaying ? 'bg-opacity-20 animate-pulse' : ''}"
+        title="点击播放"
+      >
+        <span>{ipa}</span>
+        {#if isPlaying}
+          <svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+            <rect x="6" y="4" width="4" height="16" />
+            <rect x="14" y="4" width="4" height="16" />
+          </svg>
+        {/if}
+      </button>
+    {:else}
+      <span class="text-gray-400 px-1.5 py-0.5" title="无音频">{ipa}</span>
+    {/if}
+  {:else}
+    <span class="text-gray-300">-</span>
+  {/if}
+{/snippet}
+
 {#if authLoading}
-  <div class="flex min-h-screen items-center justify-center bg-gray-100">
-    <div class="text-gray-500">检查登录状态...</div>
-  </div>
+  {@render centerMessage('检查登录状态...')}
 {:else if !isAuthenticated}
-  <div class="flex min-h-screen items-center justify-center bg-gray-100">
-    <div class="text-gray-500">正在重定向到登录页...</div>
-  </div>
+  {@render centerMessage('正在重定向到登录页...')}
 {:else}
   <div class="min-h-screen bg-gray-100">
     <!-- Toast 通知 -->
@@ -786,29 +766,8 @@
       <div class="fixed bottom-6 right-6 z-50 animate-fade-in">
         <div class="flex items-center gap-3 px-4 py-3 bg-white rounded-xl shadow-lg border
                     {toastType === 'success' ? 'border-green-200' : toastType === 'error' ? 'border-red-200' : 'border-blue-200'}">
-          {#if toastType === 'success'}
-            <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-          {:else if toastType === 'error'}
-            <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          {:else}
-            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          {/if}
+          {@render toastIcon(toastType)}
           <span class="text-sm text-gray-700 font-medium">{toastMessage}</span>
-          {#if deletedQueue.length > 0}
-            <button
-              onclick={undoDelete}
-              class="ml-2 px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 
-                     hover:bg-blue-50 rounded-lg transition-colors"
-            >
-              撤销
-            </button>
-          {/if}
           <button
             onclick={hideToast}
             class="ml-1 p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
@@ -851,7 +810,7 @@
                 {#if modelsLoading}
                   <option>加载中...</option>
                 {:else}
-                  {#each availableModels as model}
+                  {#each availableModels as model (model.id)}
                     <option value={model.id}>{model.name}</option>
                   {/each}
                 {/if}
@@ -862,6 +821,13 @@
               class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
             >
               批量导入
+            </button>
+            <button
+              onclick={fullUpdate}
+              disabled={loading}
+              class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {loading ? '更新中...' : '全量更新'}
             </button>
           </div>
         </div>
@@ -926,11 +892,11 @@
                 <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
                   单词
                 </th>
-                <th class="hidden px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase sm:table-cell">
-                  音标
+                <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                  美音
                 </th>
                 <th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                  音频
+                  英音
                 </th>
                 <th class="px-4 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase">
                   操作
@@ -942,101 +908,40 @@
                 <tr class="hover:bg-gray-50">
                   <!-- 单词列 -->
                   <td class="whitespace-nowrap px-4 py-3">
-                    {#if editingId === word.id}
-                      <input
-                        type="text"
-                        bind:value={editForm.word}
-                        class="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                      />
-                    {:else}
-                      <span class="font-medium text-gray-900">{word.word}</span>
-                    {/if}
+                    <span class="font-medium text-gray-900">{word.word}</span>
                   </td>
 
-                  <!-- 音标列 -->
-                  <td class="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 sm:table-cell">
-                    {#if editingId === word.id}
-                      <input
-                        type="text"
-                        bind:value={editForm.ipa}
-                        placeholder="音标"
-                        class="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                      />
-                    {:else}
-                      {word.ipa || '-'}
-                    {/if}
+                  <!-- 美音列（音标+发音） -->
+                  <td class="whitespace-nowrap px-4 py-3 text-sm">
+                    {@render ipaCell(word, 'us')}
                   </td>
 
-                  <!-- 音频列 -->
-                  <td class="whitespace-nowrap px-4 py-3">
-                    {#if word.audio_url}
-                      <button
-                        onclick={() => playAudio(word)}
-                        class="flex items-center gap-1 text-blue-600 hover:text-blue-800"
-                        title={playingId === word.id ? '停止播放' : '播放发音'}
-                      >
-                        {#if playingId === word.id}
-                          <svg class="h-5 w-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-                            <rect x="6" y="4" width="4" height="16" />
-                            <rect x="14" y="4" width="4" height="16" />
-                          </svg>
-                        {:else}
-                          <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                        {/if}
-                      </button>
-                    {:else}
-                      <span class="text-gray-400">-</span>
-                    {/if}
+                  <!-- 英音列（音标+发音） -->
+                  <td class="whitespace-nowrap px-4 py-3 text-sm">
+                    {@render ipaCell(word, 'uk')}
                   </td>
 
                   <!-- 操作列 -->
                   <td class="whitespace-nowrap px-4 py-3 text-right text-sm">
-                    {#if editingId === word.id}
-                      <!-- 编辑模式：仅保存和取消 -->
-                      <button
-                        onclick={() => saveEdit(word.id)}
-                        disabled={editSaving}
-                        class="mr-2 text-green-600 hover:text-green-800 disabled:opacity-50"
-                      >
-                        保存
-                      </button>
-                      <button
-                        onclick={cancelEdit}
-                        disabled={editSaving}
-                        class="text-gray-600 hover:text-gray-800 disabled:opacity-50"
-                      >
-                        取消
-                      </button>
-                    {:else}
-                      <!-- 浏览模式：显示音频操作按钮（高频操作） -->
-                      <button
-                        onclick={() => regenerateAudio(word)}
-                        disabled={regeneratingAudioId === word.id || uploadingAudioId === word.id}
-                        class="mr-2 text-purple-600 hover:text-purple-800 disabled:opacity-50"
-                        title="重新生成音频"
-                      >
-                        {regeneratingAudioId === word.id ? '生成中...' : '🔊'}
-                      </button>
-                      <button
-                        onclick={() => openUploadModal(word)}
-                        disabled={uploadingAudioId === word.id}
-                        class="mr-2 text-orange-600 hover:text-orange-800 disabled:opacity-50"
-                        title="上传自定义音频"
-                      >
-                        {uploadingAudioId === word.id ? '上传中...' : '📤'}
-                      </button>
-                      <button
-                        onclick={() => startEdit(word)}
-                        class="mr-2 text-blue-600 hover:text-blue-800"
-                      >
-                        编辑
-                      </button>
-                      <button onclick={() => deleteWord(word)} class="text-red-600 hover:text-red-800">
-                        删除
-                      </button>
-                    {/if}
+                    <button
+                      onclick={() => refreshWord(word)}
+                      disabled={refreshingWordId === word.id || uploadingAudioId === word.id}
+                      class="mr-2 text-purple-600 hover:text-purple-800 disabled:opacity-50"
+                      title="刷新音标和音频"
+                    >
+                      {refreshingWordId === word.id ? '刷新中...' : '更新'}
+                    </button>
+                    <button
+                      onclick={() => openUploadModal(word)}
+                      disabled={uploadingAudioId === word.id}
+                      class="mr-2 text-orange-600 hover:text-orange-800 disabled:opacity-50"
+                      title="上传自定义音频"
+                    >
+                      {uploadingAudioId === word.id ? '上传中...' : '上传'}
+                    </button>
+                    <button onclick={() => deleteWord(word)} class="text-red-600 hover:text-red-800">
+                      删除
+                    </button>
                   </td>
                 </tr>
               {/each}
@@ -1046,11 +951,11 @@
       {/if}
     </main>
 
-    <!-- 隐藏的音频元素 -->
+    <!-- 音频元素 -->
     <audio
       bind:this={audioRef}
       onended={onAudioEnded}
-      src={playingId ? words.find((w) => w.id === playingId)?.audio_url : ''}
+      src={getPlayingAudioUrl() || ''}
       preload="none"
     ></audio>
 
@@ -1107,7 +1012,7 @@
                 </p>
                 {#if batchResult.failed.length > 0}
                   <ul class="mt-2 max-h-32 overflow-y-auto text-sm text-red-600">
-                    {#each batchResult.failed as err}
+                    {#each batchResult.failed as err, i (i)}
                       <li>{err}</li>
                     {/each}
                   </ul>

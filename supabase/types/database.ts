@@ -14,8 +14,12 @@ export interface Word {
   id: string;
   word: string;
   normalized: string;
+  // 美音字段
   ipa: string | null;
   audio_url: string | null;
+  // 英音字段
+  ipa_uk: string | null;
+  audio_url_uk: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -25,6 +29,8 @@ export interface WordInsert {
   word: string;
   ipa?: string | null;
   audio_url?: string | null;
+  ipa_uk?: string | null;
+  audio_url_uk?: string | null;
 }
 
 // 更新词汇时的输入类型（所有字段可选）
@@ -32,6 +38,34 @@ export interface WordUpdate {
   word?: string;
   ipa?: string | null;
   audio_url?: string | null;
+  ipa_uk?: string | null;
+  audio_url_uk?: string | null;
+}
+
+// 批量更新任务
+export interface BatchUpdateTask {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  total_words: number;
+  processed_words: number;
+  failed_words: number;
+  started_at: string | null;
+  completed_at: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface BatchUpdateTaskInsert {
+  total_words: number;
+}
+
+export interface BatchUpdateTaskUpdate {
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  processed_words?: number;
+  failed_words?: number;
+  started_at?: string | null;
+  completed_at?: string | null;
+  error_message?: string | null;
 }
 
 // ============================================
@@ -45,6 +79,11 @@ export interface Database {
         Row: Word;
         Insert: WordInsert;
         Update: WordUpdate;
+      };
+      batch_update_tasks: {
+        Row: BatchUpdateTask;
+        Insert: BatchUpdateTaskInsert;
+        Update: BatchUpdateTaskUpdate;
       };
     };
   };

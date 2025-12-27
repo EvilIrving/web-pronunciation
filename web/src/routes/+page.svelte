@@ -13,6 +13,7 @@
   let total = $state(0);
   let currentAudio = $state<HTMLAudioElement | null>(null);
   let playingWordId = $state<string | null>(null);
+  let playingUkWordId = $state<string | null>(null);
 
   const LIMIT = 100;
   let searchTimeout: ReturnType<typeof setTimeout>;
@@ -71,7 +72,7 @@
     }, 300);
   }
 
-  // 播放音频
+  // 播放美音
   function playAudio(word: Word) {
     if (!word.audio_url) return;
 
@@ -79,6 +80,10 @@
     if (currentAudio) {
       currentAudio.pause();
       currentAudio = null;
+    }
+    // 停止英音播放
+    if (playingUkWordId !== null) {
+      playingUkWordId = null;
     }
 
     // 如果点击的是同一个正在播放的，则停止
@@ -99,6 +104,42 @@
 
     audio.onended = () => {
       playingWordId = null;
+      currentAudio = null;
+    };
+  }
+
+  // 播放英音
+  function playAudioUk(word: Word) {
+    if (!word.audio_url_uk) return;
+
+    // 停止当前播放的音频
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+    // 停止美音播放
+    if (playingWordId !== null) {
+      playingWordId = null;
+    }
+
+    // 如果点击的是同一个正在播放的，则停止
+    if (playingUkWordId === word.id) {
+      playingUkWordId = null;
+      return;
+    }
+
+    // 播放新音频
+    const audio = new Audio(word.audio_url_uk);
+    currentAudio = audio;
+    playingUkWordId = word.id;
+
+    audio.play().catch(e => {
+      console.error('Audio play error:', e);
+      playingUkWordId = null;
+    });
+
+    audio.onended = () => {
+      playingUkWordId = null;
       currentAudio = null;
     };
   }
@@ -192,51 +233,74 @@
         getKey={(word) => word.id}
       >
         {#snippet children({ item: word })}
-          <button
-            onclick={() => playAudio(word)}
-            disabled={!word.audio_url}
-            class="w-full h-full group relative flex items-center gap-3.5 p-3 bg-white/80 backdrop-blur-sm rounded-[14px]
-                   shadow-[0_1px_3px_rgba(0,0,0,0.06)]
-                   hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] hover:bg-white
-                   active:scale-[0.98]
-                   disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100
-                   transition-all duration-200 ease-out text-left"
-          >
-            <!-- 播放图标 -->
-            <div class="shrink-0 w-10 h-10 flex items-center justify-center rounded-[8px]
-                        {playingWordId === word.id ? 'bg-blue-500 text-white' : word.audio_url ? 'bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-slate-600' : 'bg-slate-50 text-slate-300'}
-                        transition-all duration-200">
-              {#if playingWordId === word.id}
-                <!-- 播放中动画 -->
-                <div class="flex items-end gap-[2px] h-3.5">
-                  <span class="w-[2px] bg-white rounded-full animate-bounce" style="height: 40%; animation-delay: 0ms;"></span>
-                  <span class="w-[2px] bg-white rounded-full animate-bounce" style="height: 70%; animation-delay: 150ms;"></span>
-                  <span class="w-[2px] bg-white rounded-full animate-bounce" style="height: 50%; animation-delay: 300ms;"></span>
-                  <span class="w-[2px] bg-white rounded-full animate-bounce" style="height: 80%; animation-delay: 450ms;"></span>
-                </div>
-              {:else if word.audio_url}
-                <svg class="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-              {:else}
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6l4.72-4.72a.75.75 0 011.28.531V19.94a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.506-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.395C2.806 8.757 3.63 8.25 4.51 8.25H6.75z" />
-                </svg>
-              {/if}
-            </div>
+          <div class="w-full h-full flex items-center gap-3 p-3 bg-white/80 backdrop-blur-sm rounded-[14px]
+                 shadow-[0_1px_3px_rgba(0,0,0,0.06)]
+                 hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] hover:bg-white
+                 transition-all duration-200 ease-out">
+            <!-- 单词 -->
+            <span class="text-[16px] font-medium text-slate-800 shrink-0">
+              {word.word}
+            </span>
 
-            <!-- 单词信息 -->
-            <div class="flex-1 min-w-0 flex items-baseline gap-2">
-              <span class="text-[16px] font-medium text-slate-800">
-                {word.word}
-              </span>
+            <!-- 音标区域 -->
+            <div class="flex items-center gap-3 flex-1 min-w-0">
+              <!-- 美音 -->
               {#if word.ipa}
-                <span class="text-[13px] text-slate-400 font-mono truncate">
-                  /{word.ipa}/
-                </span>
+                {#if word.audio_url}
+                  <button
+                    onclick={() => playAudio(word)}
+                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-mono text-[13px]
+                           text-blue-600 hover:text-blue-800 hover:bg-blue-50
+                           transition-colors cursor-pointer
+                           {playingWordId === word.id ? 'bg-blue-100 animate-pulse' : ''}"
+                    title="点击播放美音"
+                  >
+                    <span class="text-[10px] text-blue-400 font-sans">US</span>
+                    <span>/{word.ipa}/</span>
+                    {#if playingWordId === word.id}
+                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                        <rect x="6" y="4" width="4" height="16" />
+                        <rect x="14" y="4" width="4" height="16" />
+                      </svg>
+                    {/if}
+                  </button>
+                {:else}
+                  <span class="inline-flex items-center gap-1 px-1.5 py-0.5 font-mono text-[13px] text-slate-400" title="无音频">
+                    <span class="text-[10px] text-slate-300 font-sans">US</span>
+                    <span>/{word.ipa}/</span>
+                  </span>
+                {/if}
+              {/if}
+
+              <!-- 英音 -->
+              {#if word.ipa_uk}
+                {#if word.audio_url_uk}
+                  <button
+                    onclick={() => playAudioUk(word)}
+                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-mono text-[13px]
+                           text-green-600 hover:text-green-800 hover:bg-green-50
+                           transition-colors cursor-pointer
+                           {playingUkWordId === word.id ? 'bg-green-100 animate-pulse' : ''}"
+                    title="点击播放英音"
+                  >
+                    <span class="text-[10px] text-green-400 font-sans">UK</span>
+                    <span>/{word.ipa_uk}/</span>
+                    {#if playingUkWordId === word.id}
+                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                        <rect x="6" y="4" width="4" height="16" />
+                        <rect x="14" y="4" width="4" height="16" />
+                      </svg>
+                    {/if}
+                  </button>
+                {:else}
+                  <span class="inline-flex items-center gap-1 px-1.5 py-0.5 font-mono text-[13px] text-slate-400" title="无音频">
+                    <span class="text-[10px] text-slate-300 font-sans">UK</span>
+                    <span>/{word.ipa_uk}/</span>
+                  </span>
+                {/if}
               {/if}
             </div>
-          </button>
+          </div>
         {/snippet}
       </VirtualList>
 
