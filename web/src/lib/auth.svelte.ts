@@ -21,13 +21,8 @@ class AuthStateManager {
 
 	set user(user: User | null) {
 		this._state.user = user
-		// 持久化到 localStorage
 		if (browser) {
-			if (user) {
-				localStorage.setItem('auth_user', JSON.stringify(user));
-			} else {
-				localStorage.removeItem('auth_user');
-			}
+			user ? localStorage.setItem('auth_user', JSON.stringify(user)) : localStorage.removeItem('auth_user');
 		}
 	}
 
@@ -40,7 +35,6 @@ class AuthStateManager {
 	}
 }
 
-// 单例实例
 export const authState = new AuthStateManager()
 
 export async function signIn(email: string, password: string) {
