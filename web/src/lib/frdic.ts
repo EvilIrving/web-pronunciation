@@ -1,5 +1,6 @@
 import { MINIMAX_API_KEY } from '$env/static/private';
 import { fetchAudio as fetchYoudao } from './youdao/client';
+import { withRateLimit } from '$lib/rate-limit';
 
 const FRDIC_URL = 'https://api.frdic.com/api/v2/speech/speakweb';
 const MINIMAX_URL = 'https://api.minimaxi.com/v1/t2a_v2';
@@ -11,22 +12,24 @@ export function encode(text: string): string {
 }
 
 export async function fetchFrdic(word: string, accent = 'us', encodedTxt?: string): Promise<Uint8Array> {
-  const txt = encodedTxt || encode(word);
-  const voice = VOICES[accent] || VOICES.us;
-  const url = `${FRDIC_URL}?langid=en&voicename=${voice}&txt=${txt}`;
+  return withRateLimit('frdic', async () => {
+    const txt = encodedTxt || encode(word);
+    const voice = VOICES[accent] || VOICES.us;
+    const url = `${FRDIC_URL}?langid=en&voicename=${voice}&txt=${txt}`;
 
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      'Accept': 'audio/mpeg,audio/*,*/*',
-      'Referer': 'https://www.frdic.com/',
-    },
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'audio/mpeg,audio/*,*/*',
+        'Referer': 'https://www.frdic.com/',
+      },
+    });
+
+    if (!res.ok) throw new Error(`frdic: ${res.status}`);
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength === 0) throw new Error('empty audio');
+    return new Uint8Array(buf);
   });
-
-  if (!res.ok) throw new Error(`frdic: ${res.status}`);
-  const buf = await res.arrayBuffer();
-  if (buf.byteLength === 0) throw new Error('empty audio');
-  return new Uint8Array(buf);
 }
 
 function hexToBytes(hex: string): Uint8Array {

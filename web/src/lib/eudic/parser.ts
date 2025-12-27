@@ -7,6 +7,8 @@
  * - audio_url_us/audio_url_uk: 完整音频 URL（使用 frdic TTS）
  */
 
+import { withRateLimit } from '$lib/rate-limit';
+
 const EUDIC_API_BASE = 'https://dict.eudic.net/dicts';
 const FRDIC_URL = 'https://api.frdic.com/api/v2/speech/speakweb';
 
@@ -110,23 +112,25 @@ export function parseEudicResponse(html: string, word: string): EudicResult {
  * 获取欧路词典页面
  */
 export async function fetchEudicPage(word: string): Promise<string> {
-  const url = `${EUDIC_API_BASE}/MiniDictSearch2?word=${encodeURIComponent(word)}`;
-  console.log(`[Eudic] Fetch: ${url}`);
+  return withRateLimit('eudic', async () => {
+    const url = `${EUDIC_API_BASE}/MiniDictSearch2?word=${encodeURIComponent(word)}`;
+    console.log(`[Eudic] Fetch: ${url}`);
 
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    },
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(`Eudic: ${res.status}`);
+    }
+
+    const html = await res.text();
+    console.log(`[Eudic] Received: ${html.length} chars`);
+    return html;
   });
-
-  if (!res.ok) {
-    throw new Error(`Eudic: ${res.status}`);
-  }
-
-  const html = await res.text();
-  console.log(`[Eudic] Received: ${html.length} chars`);
-  return html;
 }
 
 /**

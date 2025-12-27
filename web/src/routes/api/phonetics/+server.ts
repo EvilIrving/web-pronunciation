@@ -6,29 +6,13 @@ import type { IpaSource } from '$lib/types';
 
 type Provider = 'youdao' | 'eudic' | 'auto';
 
-// 速率限制：每分钟最多 5 个请求
-const RATE_LIMIT = 5;
-const WINDOW_MS = 60 * 1000; // 1分钟窗口
-
-// 内存中的请求时间戳队列（仅用于服务端进程内限制）
-let requestTimes: number[] = [];
-
 // 服务端维护上次使用的 provider，用于轮询
 let lastProvider: Provider = 'youdao';
 
-function checkRateLimit(): { allowed: boolean; waitSeconds: number } {
-  const now = Date.now();
-  // 清理过期的请求记录
-  requestTimes = requestTimes.filter(t => now - t < WINDOW_MS);
-
-  if (requestTimes.length >= RATE_LIMIT) {
-    const oldest = requestTimes[0];
-    const waitSeconds = Math.ceil((oldest + WINDOW_MS - now) / 1000);
-    return { allowed: false, waitSeconds };
-  }
-
-  requestTimes.push(now);
-  return { allowed: true, waitSeconds: 0 };
+// 解析 provider 速率限制错误中的等待时间
+function parseRetryAfter(errorMessage: string): number | null {
+  const match = errorMessage.match(/retry after (\d+)s/);
+  return match ? parseInt(match[1]) : null;
 }
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -36,12 +20,6 @@ export const GET: RequestHandler = async ({ url }) => {
   let provider = (url.searchParams.get('provider') || 'auto') as Provider;
 
   if (!word) return json({ error: 'word required' }, { status: 400 });
-
-  // 速率限制检查
-  const { allowed, waitSeconds } = checkRateLimit();
-  if (!allowed) {
-    return json({ error: 'rate limited', retry_after: waitSeconds }, { status: 429 });
-  }
 
   try {
     let result;
@@ -71,7 +49,15 @@ export const GET: RequestHandler = async ({ url }) => {
 
     return json({ success: true, ...result, provider: usedProvider, ipa_source });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
     console.error(`[Phonetics/${provider}]`, e);
-    return json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });
+
+    // 检查是否是速率限制错误
+    if (msg.includes('rate limited')) {
+      const waitSeconds = parseRetryAfter(msg) || 12;
+      return json({ error: 'rate limited', retry_after: waitSeconds }, { status: 429 });
+    }
+
+    return json({ error: msg }, { status: 500 });
   }
 };
