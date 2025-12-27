@@ -46,6 +46,18 @@
   let playingId = $state<string | null>(null);
   let audioRef = $state<HTMLAudioElement | null>(null);
 
+  // 删除队列（待撤销的项）
+  interface DeletedItem {
+    id: string;
+    word: Word;
+    deletedAt: number;
+  }
+  let deletedQueue = $state<DeletedItem[]>([]);
+  let toastMessage = $state('');
+  let toastType = $state<'success' | 'error' | 'info'>('success');
+  let toastVisible = $state(false);
+  let toastTimer: ReturnType<typeof setTimeout>;
+
   // LLM 模型选择
   let selectedModel = $state<'kimi' | 'minimax'>('kimi');
   let availableModels = $state<Array<{ id: string; name: string; modelId: string; provider: string }>>([]);
@@ -316,20 +328,80 @@
     }
   }
 
-  // 删除词汇
+  // 乐观删除 + 后台同步
   async function deleteWord(word: Word) {
-    if (!confirm(`确定删除 "${word.word}" 吗？`)) return;
-    try {
-      const response = await fetch(`/api/words?id=${word.id}`, { method: 'DELETE' });
-      const result = await response.json();
+    // 1. 乐观更新：立即从 UI 移除
+    words = words.filter(w => w.id !== word.id);
+    
+    // 2. 加入撤销队列
+    deletedQueue.push({ id: word.id, word, deletedAt: Date.now() });
+    
+    // 3. 显示 Toast
+    const count = deletedQueue.length;
+    if (count === 1) {
+      showToast(`已删除「${word.word}」`, 'success');
+    } else {
+      showToast(`已删除 ${count} 项`, 'success');
+    }
+    
+    // 4. 后台异步调用 API（Promise.fire-and-forget）
+    fetch(`/api/words?id=${word.id}`, { method: 'DELETE' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('删除失败');
+        
+        // 5秒后从队列移除（若用户未撤销）
+        setTimeout(() => {
+          deletedQueue = deletedQueue.filter(d => d.id !== word.id);
+        }, 5000);
+      })
+      .catch(async (err) => {
+        console.error('Delete error:', err);
+        
+        // 失败：回滚 UI
+        words = [...words, word];
+        deletedQueue = deletedQueue.filter(d => d.id !== word.id);
+        
+        showToast('删除失败，已恢复', 'error');
+      });
+  }
 
-      if (!response.ok) {
-        throw new Error(result.error || '删除失败');
-      }
+  // 显示 Toast
+  function showToast(message: string, type: 'success' | 'error' | 'info' = 'success') {
+    toastMessage = message;
+    toastType = type;
+    toastVisible = true;
+    
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toastVisible = false;
+    }, 5000);
+  }
 
-      await loadWords();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : '删除失败');
+  // 隐藏 Toast
+  function hideToast() {
+    toastVisible = false;
+  }
+
+  // 撤销最近删除
+  function undoDelete() {
+    if (deletedQueue.length === 0) return;
+    
+    const last = deletedQueue[deletedQueue.length - 1];
+    deletedQueue = deletedQueue.slice(0, -1);
+    
+    // 恢复 UI
+    words = [...words, last.word];
+    
+    showToast(`已恢复「${last.word.word}」`, 'info');
+  }
+
+  // 键盘快捷键
+  function handleKeydown(event: KeyboardEvent) {
+    // Cmd/Ctrl + Z: 撤销
+    if ((event.metaKey || event.ctrlKey) && event.key === 'z') {
+      event.preventDefault();
+      undoDelete();
+      return;
     }
   }
 
@@ -439,6 +511,8 @@
   }
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <svelte:head>
   <title>后台管理 - 词汇管理</title>
 </svelte:head>
@@ -453,6 +527,47 @@
   </div>
 {:else}
   <div class="min-h-screen bg-gray-100">
+    <!-- Toast 通知 -->
+    {#if toastVisible}
+      <div class="fixed bottom-6 right-6 z-50 animate-fade-in">
+        <div class="flex items-center gap-3 px-4 py-3 bg-white rounded-xl shadow-lg border
+                    {toastType === 'success' ? 'border-green-200' : toastType === 'error' ? 'border-red-200' : 'border-blue-200'}">
+          {#if toastType === 'success'}
+            <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          {:else if toastType === 'error'}
+            <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          {:else}
+            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          {/if}
+          <span class="text-sm text-gray-700 font-medium">{toastMessage}</span>
+          {#if deletedQueue.length > 0}
+            <button
+              onclick={undoDelete}
+              class="ml-2 px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 
+                     hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              撤销
+            </button>
+          {/if}
+          <button
+            onclick={hideToast}
+            class="ml-1 p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+            aria-label="关闭通知"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    {/if}
+
     <!-- 顶部导航 -->
     <header class="bg-white shadow">
       <div class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
@@ -752,3 +867,21 @@
     {/if}
   </div>
 {/if}
+
+<style>
+  /* Toast 动画 */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+</style>

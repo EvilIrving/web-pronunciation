@@ -59,3 +59,18 @@
   - 修复登录成功但页面跳转失败问题
 - **Modify**: `web/src/routes/login/+page.svelte` - 添加 goto 跳转
 - **Behavior**: 登录后自动跳转，刷新页面保持登录状态
+
+### Feature - 删除操作交互优化（高频操作便捷 + 误操作可恢复）
+- **Modify**: `web/src/routes/admin/+page.svelte`:
+  - 新增 `deletedQueue` 状态 - 存储待撤销的删除项
+  - 新增 Toast 组件 - 底部右侧显示删除提示，带撤销按钮
+  - 新增 `deleteWord()` 函数 - 乐观更新 + 后台异步同步
+  - 新增 `undoDelete()` 函数 - 恢复最近删除的项
+  - 新增 `showToast()` / `hideToast()` 函数 - Toast 通知管理
+  - 新增 `handleKeydown()` 函数 - Cmd/Ctrl+Z 撤销快捷键
+  - 添加 `<svelte:window onkeydown={handleKeydown} />` 监听键盘事件
+- **Behavior**:
+  - 删除操作即时响应（乐观更新，不等待 API）
+  - 连续删除多个单词时，Toast 显示删除数量
+  - 5 秒内可点击 Toast 撤销或按 Cmd+Z 撤销
+  - API 失败时自动回滚 UI 并提示错误

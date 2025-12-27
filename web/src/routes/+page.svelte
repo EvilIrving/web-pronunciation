@@ -13,6 +13,14 @@
   let currentAudio = $state<HTMLAudioElement | null>(null);
   let playingWordId = $state<string | null>(null);
 
+  // 虚拟列表状态
+  let visibleItems = $state<Set<number>>(new Set());
+  let containerRef = $state<HTMLElement | null>(null);
+  let itemRefs = $state<Map<number, HTMLElement>>(new Map());
+  let observer: IntersectionObserver | null = null;
+  const BUFFER_SIZE = 4; // 可见区域外额外渲染的行数
+  const ITEM_HEIGHT = 76; // 预估单个项目高度（含 gap）
+
   const LIMIT = 20;
   let searchTimeout: ReturnType<typeof setTimeout>;
 
@@ -102,16 +110,176 @@
     };
   }
 
-  // 无限滚动检测
-  function handleScroll(event: Event) {
-    const target = event.target as HTMLElement;
-    const { scrollTop, scrollHeight, clientHeight } = target;
-    
-    // 距离底部 200px 时加载更多
-    if (scrollHeight - scrollTop - clientHeight < 200) {
-      loadWords();
-    }
+  // 计算每行的列数（响应式）
+  function getColumnsCount(): number {
+    if (typeof window === 'undefined') return 2;
+    return window.innerWidth >= 640 ? 2 : 1; // sm breakpoint
   }
+
+  // 根据索引计算行号
+  function getRowIndex(index: number): number {
+    return Math.floor(index / getColumnsCount());
+  }
+
+  // 检查某个索引的项是否应该渲染
+  function shouldRenderItem(index: number): boolean {
+    if (visibleItems.size === 0) return true; // 初始状态全部渲染
+    
+    const rowIndex = getRowIndex(index);
+    const cols = getColumnsCount();
+    
+    // 检查该行或相邻行是否有可见项
+    for (let row = rowIndex - BUFFER_SIZE; row <= rowIndex + BUFFER_SIZE; row++) {
+      for (let col = 0; col < cols; col++) {
+        const checkIndex = row * cols + col;
+        if (visibleItems.has(checkIndex)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // 设置 IntersectionObserver
+  function setupObserver() {
+    if (observer) {
+      observer.disconnect();
+    }
+
+    observer = new IntersectionObserver(
+      (entries) => {
+        let changed = false;
+        entries.forEach((entry) => {
+          const index = parseInt(entry.target.getAttribute('data-index') || '-1');
+          if (index === -1) return;
+
+          if (entry.isIntersecting) {
+            if (!visibleItems.has(index)) {
+              visibleItems.add(index);
+              changed = true;
+            }
+          } else {
+            if (visibleItems.has(index)) {
+              visibleItems.delete(index);
+              changed = true;
+            }
+          }
+        });
+        
+        if (changed) {
+          visibleItems = new Set(visibleItems); // 触发响应式更新
+        }
+      },
+      {
+        root: containerRef,
+        rootMargin: `${ITEM_HEIGHT * BUFFER_SIZE}px 0px`, // 提前加载缓冲区
+        threshold: 0
+      }
+    );
+
+    // 观察所有已注册的元素
+    itemRefs.forEach((el) => {
+      observer?.observe(el);
+    });
+  }
+
+  // 注册项目元素的 action
+  function observeItem(node: HTMLElement, index: number) {
+    itemRefs.set(index, node);
+    node.setAttribute('data-index', index.toString());
+    
+    if (observer) {
+      observer.observe(node);
+    }
+
+    return {
+      destroy() {
+        itemRefs.delete(index);
+        if (observer) {
+          observer.unobserve(node);
+        }
+      }
+    };
+  }
+
+  // 加载更多检测（使用 IntersectionObserver）
+  let loadMoreRef = $state<HTMLElement | null>(null);
+  let loadMoreObserver: IntersectionObserver | null = null;
+
+  function setupLoadMoreObserver() {
+    if (loadMoreObserver) {
+      loadMoreObserver.disconnect();
+    }
+
+    if (!loadMoreRef || !containerRef) return;
+
+    loadMoreObserver = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !isLoading && hasMore) {
+          loadWords();
+        }
+      },
+      {
+        root: containerRef,
+        rootMargin: '200px',
+        threshold: 0
+      }
+    );
+
+    loadMoreObserver.observe(loadMoreRef);
+  }
+
+  // 容器 ref action
+  function containerAction(node: HTMLElement) {
+    containerRef = node;
+    setupObserver();
+    
+    // 监听 resize 重新计算
+    const resizeHandler = () => {
+      visibleItems = new Set(); // 重置，让所有项重新计算
+      setupObserver();
+    };
+    window.addEventListener('resize', resizeHandler);
+
+    return {
+      destroy() {
+        window.removeEventListener('resize', resizeHandler);
+        if (observer) {
+          observer.disconnect();
+          observer = null;
+        }
+        if (loadMoreObserver) {
+          loadMoreObserver.disconnect();
+          loadMoreObserver = null;
+        }
+      }
+    };
+  }
+
+  // loadMore ref action
+  function loadMoreAction(node: HTMLElement) {
+    loadMoreRef = node;
+    setupLoadMoreObserver();
+
+    return {
+      destroy() {
+        if (loadMoreObserver) {
+          loadMoreObserver.disconnect();
+        }
+      }
+    };
+  }
+
+  // 当 words 变化时重新设置 observer
+  $effect(() => {
+    if (words.length > 0 && containerRef) {
+      // 延迟执行，确保 DOM 已更新
+      requestAnimationFrame(() => {
+        setupObserver();
+        setupLoadMoreObserver();
+      });
+    }
+  });
 
   // 初始加载
   onMount(() => {
@@ -159,7 +327,7 @@
   <!-- 词汇列表 -->
   <main 
     class="max-w-4xl mx-auto px-4 py-6 h-[calc(100vh-120px)] overflow-y-auto"
-    onscroll={handleScroll}
+    use:containerAction
   >
     {#if !isInitialized}
       <!-- 初始加载中 -->
@@ -186,63 +354,69 @@
         </p>
       </div>
     {:else}
-      <!-- 双列自适应布局 -->
+      <!-- 双列自适应虚拟列表布局 -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {#each words as word (word.id)}
-          <button
-            onclick={() => playAudio(word)}
-            disabled={!word.audio_url}
-            class="group relative flex items-center gap-4 p-4 bg-white rounded-2xl 
-                   border border-slate-200 shadow-sm
-                   hover:shadow-md hover:border-blue-300 hover:bg-blue-50/30
-                   disabled:opacity-50 disabled:cursor-not-allowed
-                   transition-all duration-200 text-left"
+        {#each words as word, index (word.id)}
+          <div 
+            use:observeItem={index}
+            class="min-h-[64px]"
           >
-            <!-- 播放图标 -->
-            <div class="shrink-0 w-12 h-12 flex items-center justify-center rounded-xl
-                        {word.audio_url ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white' : 'bg-slate-100 text-slate-400'}
-                        transition-transform duration-200 group-hover:scale-105">
-              {#if playingWordId === word.id}
-                <!-- 播放中动画 -->
-                <div class="flex items-end gap-0.5 h-5">
-                  <span class="w-1 bg-white rounded-full animate-bounce" style="height: 40%; animation-delay: 0ms;"></span>
-                  <span class="w-1 bg-white rounded-full animate-bounce" style="height: 70%; animation-delay: 150ms;"></span>
-                  <span class="w-1 bg-white rounded-full animate-bounce" style="height: 50%; animation-delay: 300ms;"></span>
-                  <span class="w-1 bg-white rounded-full animate-bounce" style="height: 80%; animation-delay: 450ms;"></span>
+            {#if shouldRenderItem(index)}
+              <button
+                onclick={() => playAudio(word)}
+                disabled={!word.audio_url}
+                class="w-full group relative flex items-center gap-4 p-4 bg-white rounded-2xl 
+                       border border-slate-200 shadow-sm
+                       hover:shadow-md hover:border-blue-300 hover:bg-blue-50/30
+                       disabled:opacity-50 disabled:cursor-not-allowed
+                       transition-all duration-200 text-left"
+              >
+                <!-- 播放图标 -->
+                <div class="shrink-0 w-12 h-12 flex items-center justify-center rounded-xl
+                            {word.audio_url ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white cursor-pointer' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}
+                            transition-transform duration-200 group-hover:scale-105">
+                  {#if playingWordId === word.id}
+                    <!-- 播放中动画 -->
+                    <div class="flex items-end gap-0.5 h-5">
+                      <span class="w-1 bg-white rounded-full animate-bounce" style="height: 40%; animation-delay: 0ms;"></span>
+                      <span class="w-1 bg-white rounded-full animate-bounce" style="height: 70%; animation-delay: 150ms;"></span>
+                      <span class="w-1 bg-white rounded-full animate-bounce" style="height: 50%; animation-delay: 300ms;"></span>
+                      <span class="w-1 bg-white rounded-full animate-bounce" style="height: 80%; animation-delay: 450ms;"></span>
+                    </div>
+                  {:else if word.audio_url}
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  {:else}
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                    </svg>
+                  {/if}
                 </div>
-              {:else if word.audio_url}
-                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-              {:else}
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                </svg>
-              {/if}
-            </div>
 
-            <!-- 单词信息 -->
-            <div class="flex-1 min-w-0">
-              <div class="text-lg font-semibold text-slate-800 truncate">
-                {word.word}
-              </div>
-              {#if word.ipa}
-                <div class="text-sm text-slate-500 font-mono truncate">
-                  {word.ipa}
+                <!-- 单词信息 -->
+                <div class="flex-1 min-w-0 flex items-baseline gap-2">
+                  <span class="text-lg font-semibold text-slate-800">
+                    {word.word}
+                  </span>
+                  {#if word.ipa}
+                    <span class="text-sm text-slate-400 font-mono truncate">
+                      /{word.ipa}/
+                    </span>
+                  {/if}
                 </div>
-              {/if}
-            </div>
-
-            <!-- Hover 指示 -->
-            {#if word.audio_url}
-              <div class="absolute right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span class="text-xs text-blue-500 font-medium">点击播放</span>
-              </div>
+              </button>
+            {:else}
+              <!-- 占位符保持高度 -->
+              <div class="w-full h-[64px] bg-slate-50 rounded-2xl"></div>
             {/if}
-          </button>
+          </div>
         {/each}
       </div>
+
+      <!-- 加载更多触发器 -->
+      <div use:loadMoreAction class="h-1"></div>
 
       <!-- 加载更多状态 -->
       {#if isLoading}
