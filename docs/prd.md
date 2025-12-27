@@ -104,6 +104,14 @@ PRD：Tech Vocabulary Index（程序员技术词汇发音索引）
 * 仅管理员可访问后台
 * 不开放普通用户提交
 
+4.3 用户认证
+
+* 认证方式：Supabase Auth（邮箱+密码）
+* 用户登录后跳转到后台管理页面
+* 登录状态通过 localStorage 持久化，刷新页面保持登录
+* 登录页面：`/login`
+* 后台管理：`/admin`（未登录时自动重定向到 login）
+
 ---
 
 五、数据模型设计
@@ -216,10 +224,13 @@ web-pronunciation/
 │   │   │   ├── llm/client.ts     # 统一 LLM 客户端
 │   │   │   ├── dictionary.ts     # 发音服务 API
 │   │   │   ├── supabase.ts       # Supabase 客户端
+│   │   │   ├── auth.svelte.ts    # 认证状态管理（Svelte rune）
 │   │   │   └── types.ts          # 类型定义
 │   │   ├── routes/               # SvelteKit 路由
 │   │   │   ├── +page.svelte      # 前台首页
 │   │   │   ├── +layout.svelte    # 全局布局
+│   │   │   ├── +layout.server.ts # 服务端 session 加载
+│   │   │   ├── login/+page.svelte # 管理员登录
 │   │   │   ├── admin/+page.svelte # 后台管理
 │   │   │   └── api/              # API 路由
 │   │   │       ├── ipa/+server.ts   # IPA 音标生成
@@ -246,13 +257,18 @@ web-pronunciation/
    - 支持动态切换模型
    - 导出 `generateIPA()` 和 `generateText()` 方法
 
-2. **API 路由**
+2. **认证管理** (`src/lib/auth.svelte.ts`)
+   - 使用 Svelte 5 runes 管理认证状态
+   - localStorage 持久化用户登录状态
+   - 导出 `authState`、`signIn`、`signOut`、`initAuth` 方法
+
+3. **API 路由**
    - `POST /api/ipa` - 生成 IPA 音标（支持选择模型）
    - `GET /api/ipa` - 获取支持的模型列表
    - `POST /api/tts` - 生成音频并上传到 R2
    - `GET/POST/PUT/DELETE /api/words` - 单词 CRUD
 
-3. **后台管理** (`src/routes/admin/+page.svelte`)
+4. **后台管理** (`src/routes/admin/+page.svelte`)
    - 词汇列表管理（搜索、编辑、删除）
    - 快速添加单词（自动获取音标+音频）
    - 批量导入（每行一个单词）
@@ -260,7 +276,11 @@ web-pronunciation/
    - LLM 模型选择器
    - **一键音频重新生成**（浏览模式下直接操作）
 
-4. **数据库触发器**
+5. **登录页面** (`src/routes/login/+page.svelte`)
+   - 管理员登录页面
+   - 登录成功后自动跳转到后台
+
+6. **数据库触发器**
    - `generate_normalized()` - 自动生成 normalized 字段
    - `update_updated_at_column()` - 自动更新时间戳
    - RLS 策略：公开读取，认证用户可写入
@@ -274,6 +294,7 @@ web-pronunciation/
 - `svelte` ^5.45.6 - Svelte 5（使用 runes 响应式）
 - `tailwindcss` ^4.1.17 - Tailwind CSS 4
 - `@supabase/supabase-js` ^2.89.0 - Supabase 客户端
+- `@supabase/ssr` ^0.5.2 - Supabase SSR 支持
 - `@aws-sdk/client-s3` ^3.958.0 - R2 存储（S3 兼容）
 - `openai` ^6.15.0 - LLM 调用
 
@@ -302,6 +323,7 @@ web-pronunciation/
 
 * AI 音标和音频生成可能有成本，需要批量处理时注意配额
 * R2 存储需要配置正确的访问策略
+* 认证依赖 Supabase Auth，需确保用户已创建
 
 ---
 

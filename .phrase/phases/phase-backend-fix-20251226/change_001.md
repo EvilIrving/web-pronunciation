@@ -39,3 +39,23 @@
   - 重新生成音频和删除为高频操作，可快速执行
   - 编辑为低频操作，需点击"编辑"按钮进入
   - 符合用户期望的交互优先级
+
+## 2024-12-27
+
+### Fix - Svelte rune 错误修复
+- **Modify**: 重命名 `web/src/lib/auth.ts` → `web/src/lib/auth.svelte.ts`
+  - `$state` rune 只能在 `.svelte` 或 `.svelte.ts` 文件中使用
+- **Modify**: 更新 `web/src/routes/admin/+page.svelte` import
+- **Modify**: 更新 `web/src/routes/login/+page.svelte` import
+- **Delete**: 删除旧的 `web/src/lib/auth.ts`
+- **Behavior**: 修复运行时错误 `rune_outside_svelte`
+
+### Fix - 登录认证持久化问题
+- **Add**: `web/src/routes/+layout.server.ts` - 服务端 session 加载
+- **Add**: `web/src/lib/auth.svelte.ts` - localStorage 持久化用户状态
+- **Modify**: `web/src/routes/admin/+page.svelte`:
+  - 从 localStorage 恢复认证状态
+  - 页面刷新后保持登录
+  - 修复登录成功但页面跳转失败问题
+- **Modify**: `web/src/routes/login/+page.svelte` - 添加 goto 跳转
+- **Behavior**: 登录后自动跳转，刷新页面保持登录状态

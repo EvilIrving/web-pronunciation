@@ -1,20 +1,34 @@
-# task_004 [x] 编辑时支持生成音频
+# task_004 [ ] 实现用户认证功能
 
 ## Description
-修复编辑单词时无法生成/重新生成音频的问题：
-- 当前 `saveEdit()` 只保存表单数据，不自动获取音频
-- 需要在编辑界面添加"生成音频"按钮
-
-## Implementation
-- 修改 `web/src/routes/admin/+page.svelte`:
-  1. 添加 `editGeneratingAudio` 状态
-  2. 在编辑表单添加"生成音频"按钮
-  3. 实现 `generateAudioForEdit()` 函数
+实现 Supabase 用户认证功能，包括登录、注册、退出，保护 admin 页面只允许登录用户访问。
 
 ## Output / Verification
-- [ ] 编辑单词时显示"生成音频"按钮
-- [ ] 点击按钮后调用 TTS API 生成音频
-- [ ] 生成的音频 URL 自动填入表单
+- [ ] 创建 `web/src/lib/auth.ts`:
+  - [ ] `signIn(email, password)` - 邮箱密码登录
+  - [ ] `signUp(email, password)` - 注册新用户
+  - [ ] `signOut()` - 退出登录
+  - [ ] `getSession()` - 获取当前会话
+  - [ ] `onAuthStateChange(callback)` - 监听认证状态变化
+- [ ] 创建 `web/src/routes/login/+page.svelte` - 登录页面
+- [ ] 创建 `web/src/routes/logout/+server.ts` - 退出 API
+- [ ] 修改 `web/src/routes/admin/+page.svelte`:
+  - [ ] 添加登录状态检查
+  - [ ] 未登录用户重定向到登录页
+  - [ ] 显示登录用户信息
+- [ ] 验证步骤：
+  1. `cd web && pnpm dev`
+  2. 访问 `http://localhost:5173/admin`
+  3. 确认重定向到登录页
+  4. 登录后访问 admin 页面
+  5. 测试退出功能
 
 ## Impact
-- `web/src/routes/admin/+page.svelte` - 添加生成音频功能
+- `web/src/lib/auth.ts` - 新增认证模块
+- `web/src/routes/login/+page.svelte` - 新增登录页面
+- `web/src/routes/logout/+server.ts` - 新增退出 API
+- `web/src/routes/admin/+page.svelte` - 添加认证保护
+
+## Related
+- plan_001 - 后台管理权限修复计划
+- task_003 - GraphQL 查询封装模块

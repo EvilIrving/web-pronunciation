@@ -1,28 +1,27 @@
-# task_003 [x] 音频改用 MiniMax T2A 生成
+# task_003 [ ] 创建 GraphQL 查询封装模块
 
 ## Description
-修复音频来源问题：
-- 当前使用 `api.dictionaryapi.dev` 获取音频（不正确）
-- 改为使用 MiniMax T2A API 生成音频，并上传到 R2 存储
-- IPA 音标改用 Moonshot AI（KIMI）生成
+封装前端 GraphQL/Supabase 查询功能，提供统一的 API 接口供用户界面和 admin 页面使用。
 
 ## Output / Verification
-- [x] 创建 `web/src/routes/api/tts/+server.ts` - MiniMax T2A 音频生成 API
-- [x] 创建 `web/src/routes/api/ipa/+server.ts` - Moonshot AI IPA 生成 API
-- [x] 修改 `web/src/lib/dictionary.ts` - 调用服务端 API 获取发音信息
+- [ ] 创建 `web/src/lib/graphql/queries.ts`:
+  - [ ] `getWords()` - 获取单词列表（支持过滤、排序、分页）
+  - [ ] `getWord(id)` - 获取单个单词详情
+  - [ ] `createWord(data)` - 创建单词
+  - [ ] `updateWord(id, data)` - 更新单词
+  - [ ] `deleteWord(id)` - 删除单词
+- [ ] 创建 `web/src/lib/graphql/index.ts` - 统一导出
 - [ ] 验证步骤：
   1. `cd web && pnpm dev`
-  2. 访问 `http://localhost:5173/admin`
-  3. 快速添加单词（如 "coroutine"）
-  4. 检查数据库中 `audio_url` 字段是否为 R2 URL（而非 dictionaryapi.dev URL）
-  5. 点击播放按钮，确认音频可正常播放
+  2. 访问 `http://localhost:5173/`
+  3. 确认首页显示单词列表
+  4. 测试筛选、排序功能
 
 ## Impact
-- `web/src/routes/api/tts/+server.ts` - 新增音频生成 API
-- `web/src/routes/api/ipa/+server.ts` - 新增音标生成 API
-- `web/src/lib/dictionary.ts` - 修改为调用服务端 API
-- `web/src/routes/admin/+page.svelte` - 间接影响（通过 dictionary.ts）
+- `web/src/lib/graphql/queries.ts` - 新增 GraphQL 查询模块
+- `web/src/lib/graphql/index.ts` - 新增导出入口
+- `web/src/routes/+page.svelte` - 使用新模块获取数据
 
 ## Related
-- prd.md - 发音方案设计
 - plan_001 - 后台管理权限修复计划
+- task_004 - 实现用户认证功能
