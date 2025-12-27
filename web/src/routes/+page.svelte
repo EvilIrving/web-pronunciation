@@ -255,7 +255,7 @@
                            {playingWordId === word.id ? 'bg-blue-100 animate-pulse' : ''}"
                     title="点击播放美音"
                   >
-                    <span class="text-[10px] text-blue-400 font-sans">US</span>
+                    <span class="text-[8px] text-blue-400 font-sans">US</span>
                     <span>/{word.ipa}/</span>
                     {#if playingWordId === word.id}
                       <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
@@ -266,7 +266,7 @@
                   </button>
                 {:else}
                   <span class="inline-flex items-center gap-1 px-1.5 py-0.5 font-mono text-[13px] text-slate-400" title="无音频">
-                    <span class="text-[10px] text-slate-300 font-sans">US</span>
+                    <span class="text-[8px] text-slate-300 font-sans">US</span>
                     <span>/{word.ipa}/</span>
                   </span>
                 {/if}
@@ -283,7 +283,7 @@
                            {playingUkWordId === word.id ? 'bg-green-100 animate-pulse' : ''}"
                     title="点击播放英音"
                   >
-                    <span class="text-[10px] text-green-400 font-sans">UK</span>
+                    <span class="text-[8px] text-green-400 font-sans">UK</span>
                     <span>/{word.ipa_uk}/</span>
                     {#if playingUkWordId === word.id}
                       <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
@@ -294,7 +294,7 @@
                   </button>
                 {:else}
                   <span class="inline-flex items-center gap-1 px-1.5 py-0.5 font-mono text-[13px] text-slate-400" title="无音频">
-                    <span class="text-[10px] text-slate-300 font-sans">UK</span>
+                    <span class="text-[8px] text-slate-300 font-sans">UK</span>
                     <span>/{word.ipa_uk}/</span>
                   </span>
                 {/if}
