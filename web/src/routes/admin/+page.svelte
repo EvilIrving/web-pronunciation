@@ -224,6 +224,22 @@
     quickAddError = null;
     quickAddLoading = true;
 
+    // 创建临时的乐观更新对象（使用临时 ID）
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const optimisticWord: Word = {
+      id: tempId,
+      word: word,
+      ipa: null,
+      audio_url: null,
+      normalized: word.toLowerCase(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // 1. 乐观更新：立即添加到列表顶部
+    words = [optimisticWord, ...words];
+    showToast(`正在添加「${word}」...`, 'info');
+
     try {
       // 获取发音信息
       let ipa = '';
@@ -252,9 +268,14 @@
         throw new Error(result.error || '保存失败');
       }
 
-      await loadWords();
+      // 2. 成功：用服务器返回的真实数据替换乐观对象
+      words = words.map(w => w.id === tempId ? { ...w, ...result.data } : w);
+      showToast(`已添加「${word}」`, 'success');
     } catch (e) {
+      // 失败：移除乐观对象
+      words = words.filter(w => w.id !== tempId);
       quickAddError = e instanceof Error ? e.message : '保存失败';
+      showToast(quickAddError, 'error');
     } finally {
       quickAddLoading = false;
     }
@@ -279,6 +300,25 @@
   async function saveEdit(id: string) {
     editSaving = true;
 
+    // 查找被编辑的词
+    const originalWord = words.find(w => w.id === id);
+    if (!originalWord) {
+      editSaving = false;
+      return;
+    }
+
+    // 创建乐观更新的词
+    const optimisticWord: Word = {
+      ...originalWord,
+      word: editForm.word,
+      ipa: editForm.ipa || null,
+    };
+
+    // 1. 乐观更新：立即更新 UI
+    words = words.map(w => w.id === id ? optimisticWord : w);
+    editingId = null;
+    showToast(`正在保存「${originalWord.word}」...`, 'info');
+
     try {
       const response = await fetch('/api/words', {
         method: 'PUT',
@@ -292,10 +332,13 @@
         throw new Error(result.error || '保存失败');
       }
 
-      editingId = null;
-      await loadWords();
+      // 2. 成功：确保数据同步
+      words = words.map(w => w.id === id ? { ...w, ...result.data } : w);
+      showToast(`已保存「${editForm.word}」`, 'success');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '保存失败');
+      // 失败：回滚到原始数据
+      words = words.map(w => w.id === id ? originalWord : w);
+      showToast(e instanceof Error ? e.message : '保存失败', 'error');
     } finally {
       editSaving = false;
     }
@@ -305,11 +348,18 @@
   async function regenerateAudio(word: Word) {
     regeneratingAudioId = word.id;
 
+    // 1. 乐观更新：立即清空音频 URL（显示生成中状态）
+    words = words.map(w => w.id === word.id ? { ...w, audio_url: '' } : w);
+    showToast(`正在为「${word.word}」生成音频...`, 'info');
+
     try {
       const audioUrl = await fetchTTS(word.word);
 
       if (!audioUrl) {
-        alert('生成音频失败');
+        // 失败：恢复原音频 URL
+        words = words.map(w => w.id === word.id ? { ...w, audio_url: word.audio_url } : w);
+        showToast('生成音频失败', 'error');
+        regeneratingAudioId = null;
         return;
       }
 
@@ -323,13 +373,16 @@
       const result = await response.json();
 
       if (!response.ok) {
+        // 失败：恢复原音频 URL
+        words = words.map(w => w.id === word.id ? { ...w, audio_url: word.audio_url } : w);
         throw new Error(result.error || '更新音频失败');
       }
 
-      // 刷新列表
-      await loadWords();
+      // 成功：更新音频 URL
+      words = words.map(w => w.id === word.id ? { ...w, audio_url: audioUrl } : w);
+      showToast(`已为「${word.word}」生成音频`, 'success');
     } catch (e) {
-      alert(e instanceof Error ? e.message : '重新生成音频失败');
+      showToast(e instanceof Error ? e.message : '重新生成音频失败', 'error');
     } finally {
       regeneratingAudioId = null;
     }
@@ -459,8 +512,21 @@
     let success = 0;
     const failed: string[] = [];
 
+    // 1. 乐观更新：立即将所有单词添加到列表顶部
+    const optimisticWords: Word[] = lines.map((word, i) => ({
+      id: `temp-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
+      word,
+      ipa: null,
+      audio_url: null,
+      normalized: word.toLowerCase(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+    words = [...optimisticWords, ...words];
+
     for (let i = 0; i < lines.length; i++) {
       const word = lines[i];
+      const tempId = optimisticWords[i].id;
       batchProgress = { current: i + 1, total: lines.length, word };
 
       try {
@@ -488,11 +554,17 @@
 
         if (!response.ok) {
           failed.push(`${word}: ${result.error || '未知错误'}`);
+          // 失败：移除乐观对象
+          words = words.filter(w => w.id !== tempId);
         } else {
           success++;
+          // 成功：用服务器数据替换乐观对象
+          words = words.map(w => w.id === tempId ? { ...w, ...result.data } : w);
         }
       } catch (e) {
         failed.push(`${word}: ${e instanceof Error ? e.message : '未知错误'}`);
+        // 失败：移除乐观对象
+        words = words.filter(w => w.id !== tempId);
       }
 
       // 添加小延迟避免请求过快
@@ -504,8 +576,12 @@
     batchResult = { success, failed };
     batchLoading = false;
     batchProgress = null;
+
     if (success > 0) {
-      await loadWords();
+      showToast(`成功导入 ${success} 个单词`, 'success');
+    }
+    if (failed.length > 0) {
+      showToast(`导入失败 ${failed.length} 个单词`, 'error');
     }
   }
 
@@ -558,14 +634,26 @@
       return;
     }
 
+    if (!uploadWord) return;
+
+    // 保存上传信息到局部变量（在调用 closeUploadModal 之前）
+    const uploadWordId = uploadWord.id;
+    const uploadWordText = uploadWord.word;
+    const originalAudioUrl = uploadWord.audio_url;
+
     uploadLoading = true;
     uploadError = null;
+
+    // 1. 乐观更新：立即清空音频 URL
+    words = words.map(w => w.id === uploadWordId ? { ...w, audio_url: '' } : w);
+    showToast(`正在上传「${uploadWordText}」音频...`, 'info');
+    closeUploadModal();
 
     try {
       const response = await fetch('/api/upload-audio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, word: uploadWord?.word }),
+        body: JSON.stringify({ url, word: uploadWordText }),
       });
 
       const result = await response.json();
@@ -578,7 +666,7 @@
       const updateResponse = await fetch('/api/words', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: uploadWord?.id, audio_url: result.audio_url }),
+        body: JSON.stringify({ id: uploadWordId, audio_url: result.audio_url }),
       });
 
       const updateResult = await updateResponse.json();
@@ -587,11 +675,13 @@
         throw new Error(updateResult.error || '更新音频失败');
       }
 
-      showToast(`已上传「${uploadWord?.word}」音频`, 'success');
-      closeUploadModal();
-      await loadWords();
+      // 成功：更新音频 URL
+      words = words.map(w => w.id === uploadWordId ? { ...w, audio_url: result.audio_url } : w);
+      showToast(`已上传「${uploadWordText}」音频`, 'success');
     } catch (e) {
-      uploadError = e instanceof Error ? e.message : '上传失败';
+      // 失败：恢复原音频 URL
+      words = words.map(w => w.id === uploadWordId ? { ...w, audio_url: originalAudioUrl } : w);
+      showToast(e instanceof Error ? e.message : '上传失败', 'error');
     } finally {
       uploadLoading = false;
     }
@@ -610,16 +700,27 @@
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     
-    if (!file || !pendingUploadWord) {
+    // 获取上传的单词对象
+    const wordToUpload = pendingUploadWord;
+    if (!file || !wordToUpload) {
       return;
     }
 
-    uploadingAudioId = pendingUploadWord.id;
+    // 保存上传信息到局部变量
+    const pendingWordId = wordToUpload.id;
+    const pendingWordText = wordToUpload.word;
+    const originalAudioUrl = wordToUpload.audio_url;
+
+    uploadingAudioId = pendingWordId;
+
+    // 1. 乐观更新：立即清空音频 URL
+    words = words.map(w => w.id === pendingWordId ? { ...w, audio_url: '' } : w);
+    showToast(`正在上传「${pendingWordText}」音频...`, 'info');
     
     try {
       const formData = new FormData();
       formData.append('audio', file);
-      formData.append('word', pendingUploadWord.word);
+      formData.append('word', pendingWordText);
 
       const response = await fetch('/api/upload-audio', {
         method: 'POST',
@@ -636,7 +737,7 @@
       const updateResponse = await fetch('/api/words', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: pendingUploadWord.id, audio_url: result.audio_url }),
+        body: JSON.stringify({ id: pendingWordId, audio_url: result.audio_url }),
       });
 
       const updateResult = await updateResponse.json();
@@ -645,9 +746,12 @@
         throw new Error(updateResult.error || '更新音频失败');
       }
 
-      showToast(`已上传「${pendingUploadWord.word}」音频`, 'success');
-      await loadWords();
+      // 成功：更新音频 URL
+      words = words.map(w => w.id === pendingWordId ? { ...w, audio_url: result.audio_url } : w);
+      showToast(`已上传「${pendingWordText}」音频`, 'success');
     } catch (e) {
+      // 失败：恢复原音频 URL
+      words = words.map(w => w.id === pendingWordId ? { ...w, audio_url: originalAudioUrl } : w);
       showToast(e instanceof Error ? e.message : '上传失败', 'error');
     } finally {
       uploadingAudioId = null;
@@ -1149,3 +1253,4 @@
     animation: fade-in 0.3s ease-out;
   }
 </style>
+

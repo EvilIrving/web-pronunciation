@@ -80,3 +80,17 @@
   - 默认使用 frdic.com 真人发音（美音 en_us_female）
   - 如需切换回 AI 发音，调用时传入 `{ word: "xxx", provider: "minimax" }`
   - 代码保持可回退，frdic 接口不可用时可快速切换
+
+### Refactor - 列表操作改为乐观更新（与删除交互一致）
+- **Modify**: `web/src/routes/admin/+page.svelte`:
+  - `quickAdd()`: 立即在列表顶部添加临时对象，API 成功后替换为真实数据，失败则移除
+  - `saveEdit()`: 立即更新本地数据，API 失败则回滚
+  - `regenerateAudio()`: 立即清空 audio_url 显示生成中状态，失败恢复原 URL
+  - `importBatch()`: 立即将所有单词添加到列表顶部，每项成功替换为真实数据，失败移除
+  - `uploadAudioByUrl()`: 立即清空 audio_url 显示上传中状态，失败恢复原 URL
+  - `handleFileSelect()`: 立即清空 audio_url 显示上传中状态，失败恢复原 URL
+- **Behavior**:
+  - 添加/编辑/批量导入/音频操作后不再重新加载整个列表
+  - 保持与删除操作一致的优雅交互体验
+  - 操作失败时自动回滚到原始状态
+  - 使用 Toast 通知显示操作进度和结果
