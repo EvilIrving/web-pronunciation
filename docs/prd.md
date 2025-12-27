@@ -162,24 +162,19 @@ PRD：Tech Vocabulary Index（程序员技术词汇发音索引）
 
 * 目标平台
 * Web
-  * SvelteKit + Vite + Tailwindcss
+  * SvelteKit 2.x + Svelte 5 + Vite 7 + Tailwind CSS 4
 
 后台管理：
 
 * Web
-  * SvelteKit + Vite + Tailwindcss
-  * 需要支持大屏和小屏（手机端），方便在手机进入后台管理上传数据
+  * SvelteKit 2.x + Svelte 5 + Tailwind CSS 4
+  * 响应式设计，支持桌面端和移动端
   * 表单 + 表格为主
 
 后端：
 
-* REST API / GraphQL API
-* 部署平台（免费 tier）：
-  * Vercel Serverless Functions（推荐，与前端同平台）
-  * Cloudflare Workers
-
-* GraphQL
-  * Supabase：<https://supabase.com/docs/guides/graphql>
+* SvelteKit API Routes（Server-side）
+* 部署平台：Vercel（adapter-vercel）
 
 数据库： Supabase PostgreSQL
 对象存储（音频文件）： Cloudflare R2
@@ -193,8 +188,91 @@ AI 服务：
 
 * Moonshot AI（KIMI）：音标生成
 * MiniMax T2A：音频生成
+* 统一通过 OpenAI SDK 调用（兼容接口）
 * 仅用于批量导入时的音标和音频生成
 * 非运行时依赖（前端只播放音频）
+
+---
+
+七.1 项目代码结构
+
+```
+web-pronunciation/
+├── docs/                         # 项目文档
+│   ├── prd.md                    # 产品需求文档
+│   ├── audio_api.md              # 音频 API 参考
+│   ├── kimi_text.md              # Kimi API 参考
+│   └── minimax_text_api.md       # MiniMax API 参考
+├── supabase/                     # 数据库配置
+│   ├── types/database.ts         # 数据库类型定义
+│   ├── config.toml               # Supabase 配置
+│   ├── create_words_table.sql    # 建表脚本
+│   └── seed.sql                  # 种子数据
+├── web/                          # Web 应用主目录
+│   ├── src/
+│   │   ├── lib/                  # 共享库
+│   │   │   ├── llm/client.ts     # 统一 LLM 客户端
+│   │   │   ├── dictionary.ts     # 发音服务 API
+│   │   │   ├── supabase.ts       # Supabase 客户端
+│   │   │   └── types.ts          # 类型定义
+│   │   ├── routes/               # SvelteKit 路由
+│   │   │   ├── +page.svelte      # 前台首页
+│   │   │   ├── +layout.svelte    # 全局布局
+│   │   │   ├── admin/+page.svelte # 后台管理
+│   │   │   └── api/              # API 路由
+│   │   │       ├── ipa/+server.ts   # IPA 音标生成
+│   │   │       ├── tts/+server.ts   # TTS 音频生成
+│   │   │       └── words/+server.ts # 单词 CRUD
+│   │   ├── app.html              # HTML 模板
+│   │   └── app.d.ts              # 类型声明
+│   ├── static/                   # 静态资源
+│   ├── package.json              # 依赖配置
+│   ├── svelte.config.js          # SvelteKit 配置
+│   ├── vite.config.ts            # Vite 配置
+│   └── tsconfig.json             # TypeScript 配置
+├── AGENTS.md                     # AI Agent 工作流
+└── README.md                     # 项目说明
+```
+
+---
+
+七.2 核心模块说明
+
+1. **LLM 客户端** (`src/lib/llm/client.ts`)
+   - 统一封装 Moonshot AI (Kimi) 和 MiniMax 模型调用
+   - 使用 OpenAI SDK 兼容接口
+   - 支持动态切换模型
+   - 导出 `generateIPA()` 和 `generateText()` 方法
+
+2. **API 路由**
+   - `POST /api/ipa` - 生成 IPA 音标（支持选择模型）
+   - `GET /api/ipa` - 获取支持的模型列表
+   - `POST /api/tts` - 生成音频并上传到 R2
+   - `GET/POST/PUT/DELETE /api/words` - 单词 CRUD
+
+3. **后台管理** (`src/routes/admin/+page.svelte`)
+   - 词汇列表管理（搜索、编辑、删除）
+   - 快速添加单词（自动获取音标+音频）
+   - 批量导入（每行一个单词）
+   - 行内编辑与音频播放
+   - LLM 模型选择器
+
+4. **数据库触发器**
+   - `generate_normalized()` - 自动生成 normalized 字段
+   - `update_updated_at_column()` - 自动更新时间戳
+   - RLS 策略：公开读取，认证用户可写入
+
+---
+
+七.3 依赖清单
+
+核心依赖：
+- `@sveltejs/kit` ^2.49.1 - SvelteKit 框架
+- `svelte` ^5.45.6 - Svelte 5（使用 runes 响应式）
+- `tailwindcss` ^4.1.17 - Tailwind CSS 4
+- `@supabase/supabase-js` ^2.89.0 - Supabase 客户端
+- `@aws-sdk/client-s3` ^3.958.0 - R2 存储（S3 兼容）
+- `openai` ^6.15.0 - LLM 调用
 
 ---
 

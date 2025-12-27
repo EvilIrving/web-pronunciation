@@ -91,6 +91,9 @@ async function generateAudioWithMiniMax(text: string): Promise<{ audioUrl: strin
 
     const data = await response.json();
 
+    console.log('[TTS] MiniMax response status:', data.base_resp?.status_code);
+    console.log('[TTS] Audio hex length:', data.data?.audio?.length);
+
     if (data.base_resp?.status_code !== 0) {
         throw new Error(`MiniMax API error: ${data.base_resp?.status_msg || 'unknown error'}`);
     }
@@ -101,7 +104,9 @@ async function generateAudioWithMiniMax(text: string): Promise<{ audioUrl: strin
         throw new Error('No audio data in response');
     }
 
+    console.log('[TTS] Converting hex to audio data...');
     const audioData = hexToUint8Array(audioHex);
+    console.log('[TTS] Audio data size:', audioData.length, 'bytes');
 
     // 生成文件名（使用单词 + 时间戳）
     const filename = `${text.toLowerCase()}_${Date.now()}.mp3`;

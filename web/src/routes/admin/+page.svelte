@@ -275,6 +275,15 @@
     } else {
       // 开始播放
       playingId = word.id;
+      // 等待 DOM 更新后播放
+      setTimeout(() => {
+        if (audioRef) {
+          audioRef.play().catch((e) => {
+            console.error('播放失败:', e);
+            playingId = null;
+          });
+        }
+      }, 50);
     }
   }
 

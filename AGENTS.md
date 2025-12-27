@@ -5,7 +5,7 @@
 ## 0. 原则（按优先级）
 
 - 仓库既有规范 > 本文；冲突时按 `README`/`STYLEGUIDE` 等执行，并在 `issue_*`/`change_*` 记录取舍。
-- 文档为事实来源：需求、交互、接口只能来自 `spec/plan/tech-refer/adr`。
+- 文档为事实来源：需求、交互、接口只能来自 `docs/prd.md` 和 `.phrase/` 文档。
 - 单次仅处理一个原子任务；所有改动可追溯到 `taskNNN` 与其依据（`spec`/`issue`/`adr`）。
 - 每个 `taskNNN` 必须说明验证方式（测试或手动步骤）。
 - 实现完成必须回写：`task_*`、`change_*`，必要时更新 `spec_*`/`issue_*`/`adr_*`。
@@ -14,11 +14,16 @@
 
 ## 1. 仓库结构与文档
 
-- 代码根：`App/`, `Core/`, `UI/`, `Shared/`, `Tests/`, `Assets/`, `Samples/`, `Schemas/`, `StackWM-Bridging-Header.h`。保持分层清晰，`Tests/` 镜像核心模块。
-- 文档根：`.phrase/`
-  - 阶段：`.phrase/phases/phase-<purpose>-<YYYYMMDD>/`
-  - 全局索引：`.phrase/docs/`
-- `Docs/` 为外部文档，可继续独立存放。
+- 代码根：`web/`（SvelteKit 应用）
+  - `web/src/lib/` - 共享库（LLM 客户端、Supabase、类型定义）
+  - `web/src/routes/` - 页面与 API 路由
+  - `web/src/routes/api/` - 服务端 API
+- 数据库：`supabase/`（SQL schema、类型定义）
+- 文档根：
+  - `docs/` - 产品文档（PRD、API 参考）
+  - `.phrase/` - 阶段性工作文档
+    - `.phrase/phases/phase-<purpose>-<YYYYMMDD>/`
+    - `.phrase/docs/` - 全局索引
 
 ---
 
@@ -59,18 +64,26 @@
 
 ## 4. Build / Test / Dev
 
-- 优先使用仓库提供的入口（Xcode scheme、SwiftPM、`Scripts/` 工具等）；无统一入口时可补最小脚本并在 `plan_*` 记录。
-- 构建：`swift build`（或 `swift build -c release`）。运行：`swift run StackWM`。测试：`swift test`（必要时加 `--enable-code-coverage`）。
-- 可选工具：`swiftformat .` → `swiftlint`（若可用且允许）。
+- 工作目录：`web/`
+- 开发服务器：`pnpm dev`（Vite 热重载，默认端口 5173）
+- 构建：`pnpm build`（输出到 `.svelte-kit/`）
+- 预览：`pnpm preview`
+- 类型检查：`pnpm check` 或 `pnpm check:watch`
+- 依赖管理：使用 `pnpm`（workspace 配置）
+- 环境变量：复制 `.env.example` 为 `.env` 并填写 API 密钥
 
 ---
 
 ## 5. 编码与验证
 
-- 风格：Swift 5.9+/macOS 13+；4-space 缩进，≤120 列；类型 PascalCase，函数/属性 lowerCamelCase，全局常量 UPPER_SNAKE_CASE。偏好值类型、不可变性，能 `final` 就 `final`。
-- 遵循现有错误处理、日志框架和模块边界；除非任务就是清理，否则禁止批量重排 import 或大范围格式化。
-- 关键路径加可诊断日志（遵循项目 logging 方案）。
-- 测试优先覆盖核心逻辑；UI/系统胶水可提供手动验证步骤。测试必须确定性，必要时注入依赖或 mock。
+- 框架：SvelteKit 2.x + Svelte 5（使用 runes 响应式：`$state`、`$derived`、`$effect`）
+- 样式：Tailwind CSS 4，响应式设计优先
+- 风格：TypeScript 严格模式；2-space 缩进；类型 PascalCase，变量/函数 camelCase
+- API 路由：使用 `+server.ts`，返回 `json()` 响应
+- 数据库：通过 `/api/words` 路由操作（使用 Service Role Key 绕过 RLS）
+- LLM 调用：统一使用 `$lib/llm/client.ts`，支持 Kimi/MiniMax 切换
+- 遵循现有错误处理模式（try-catch + console.error + json 响应）
+- 测试优先覆盖核心逻辑；UI 变更可提供手动验证步骤
 
 ---
 
@@ -106,3 +119,56 @@
 - 解释方案时优先描述用户操作（快捷键/鼠标/命令）、可见反馈、撤销/失败路径、边界情况。
 - 引用文档时用“文件名 + 小节”口语化说明，不逐字背诵。
 - 提供可选方案时说明它们属于当前还是后续里程碑，帮助用户决策。
+
+---
+
+## 10. 环境变量参考
+
+```env
+# Supabase
+PUBLIC_SUPABASE_URL=your_supabase_url
+PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Moonshot AI (Kimi)
+MOONSHOT_API_KEY=your_moonshot_api_key
+MOONSHOT_BASE_URL=https://api.moonshot.cn/v1
+
+# MiniMax
+MINIMAX_API_KEY=your_minimax_api_key
+MINIMAX_BASE_URL=https://api.minimaxi.com/v1
+
+# Cloudflare R2
+R2_ACCOUNT_ID=your_r2_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key
+R2_SECRET_ACCESS_KEY=your_r2_secret_key
+R2_BUCKET_NAME=your_bucket_name
+R2_PUBLIC_URL=https://your-r2-public-url
+
+# LLM 默认模型
+LLM_MODEL=kimi
+```
+
+---
+
+## 11. 常用开发命令
+
+```bash
+# 进入 web 目录
+cd web
+
+# 安装依赖
+pnpm install
+
+# 开发模式
+pnpm dev
+
+# 类型检查
+pnpm check
+
+# 构建
+pnpm build
+
+# 预览构建结果
+pnpm preview
+```
