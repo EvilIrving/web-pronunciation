@@ -5,6 +5,8 @@
 ---
 
 ## phase-eudic-crawler-20251227 (2025-12-27)
+- `change_003` - 移动端布局优化 ([链接](../phases/phase-eudic-crawler-20251227/change_002.md))
+  - **task004** (2025-12-27) - 优化首页移动端布局：字体调整为 `text-sm`，触摸目标增大，安全区域适配，响应式断点调整（640px 2 列）
 - `change_002` - 字段重命名：ipa/audio_url → ipa_us/audio_url_us ([链接](../phases/phase-eudic-crawler-20251227/change_002.md))
   - **Refactor** (2025-12-27) - 字段命名统一：将 `ipa` 改为 `ipa_us`，`audio_url` 改为 `audio_url_us`，与英音字段 `ipa_uk`/`audio_url_uk` 保持一致的命名规范
 

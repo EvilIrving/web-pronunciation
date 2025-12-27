@@ -15,8 +15,17 @@
   let audio = $state<HTMLAudioElement | null>(null);
   let playing = $state<{ id: string; accent: Accent } | null>(null);
 
-  const LIMIT = 100;
+  const LIMIT = 50;
   let debounce: ReturnType<typeof setTimeout>;
+
+  // 响应式字体大小
+  let isMobile = $state(false);
+
+  function checkMobile() {
+    if (typeof window !== 'undefined') {
+      isMobile = window.innerWidth < 640;
+    }
+  }
 
   async function load(reset = false) {
     if (isLoading || (!hasMore && !reset)) return;
@@ -71,7 +80,7 @@
     return playing?.id === word.id && playing?.accent === accent;
   }
 
-  onMount(() => load(true));
+  onMount(() => { checkMobile(); load(true); window.addEventListener('resize', checkMobile); });
 </script>
 
 {#snippet ipa(word: Word, accent: Accent)}
@@ -86,30 +95,32 @@
         onclick={() => play(word, accent)} 
         class="bg-transparent border-none p-0 font-mono text-terminal-accent cursor-pointer hover:text-terminal-accent-hover {active ? 'text-terminal-accent-active' : ''}"
       >
-        [{isUs ? 'US' : 'UK'}] /{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}{active ? ' ▮▮' : ''}
+        <sub class="text-[9px] text-terminal-text-muted">{isUs ? 'US' : 'UK'}</sub> /{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}{active ? ' ▮▮' : ''}
       </button>
     {:else}
-      <span class="text-terminal-disabled cursor-default">[{isUs ? 'US' : 'UK'}] /{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}</span>
+      <span class="text-terminal-disabled cursor-default"><sub class="text-[9px] text-terminal-text-muted">{isUs ? 'US' : 'UK'}</sub> /{ipaText}/{#if isAI}<sup class="text-[9px] text-terminal-text-muted ml-0.5">ai</sup>{/if}</span>
     {/if}
   {/if}
 {/snippet}
 
 <svelte:head><title>pron</title></svelte:head>
 
-<div class="min-h-screen bg-terminal-bg text-terminal-text-secondary font-mono text-[13px] leading-relaxed">
-  <header class="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 bg-terminal-bg-secondary border-b border-terminal-border">
-    <span class="text-terminal-accent">$</span>
+<div class="min-h-screen bg-terminal-bg text-terminal-text-secondary font-mono text-sm leading-relaxed">
+  <header class="sticky top-0 z-10 flex items-center gap-2 px-3 py-3 bg-terminal-bg-secondary border-b border-terminal-border safe-area-inset-top">
+    <span class="text-terminal-accent shrink-0">$</span>
     <input 
       type="text" 
       placeholder="grep ..." 
       value={searchQuery} 
       oninput={search}
-      class="flex-1 bg-transparent border-none outline-none text-terminal-text-primary font-mono caret-terminal-accent placeholder:text-terminal-text-muted"
+      class="flex-1 min-w-0 bg-transparent border-none outline-none text-terminal-text-primary font-mono caret-terminal-accent placeholder:text-terminal-text-muted py-2"
     />
-    <span class="text-terminal-text-dim text-xs">{total} entries</span>
+    {#if !isMobile}
+      <span class="text-terminal-text-dim text-xs shrink-0">{total} entries</span>
+    {/if}
   </header>
 
-  <main class="bg-terminal-bg max-w-7xl mx-auto px-4 py-2 h-[calc(100vh-42px)] flex flex-col">
+  <main class="bg-terminal-bg max-w-7xl mx-auto px-3 pb-safe h-[calc(100vh-var(--header-height,60px))] flex flex-col">
     {#if !isInitialized}
       <p class="text-terminal-text-muted py-4 text-center">loading...</p>
     {:else if !words.length}
@@ -117,30 +128,48 @@
     {:else}
       <VirtualList
         items={words}
-        itemHeight={28}
+        itemHeight={isMobile ? 48 : 28}
         gap={0}
         columns={1}
-        columnBreakpoints={{ 768: 2 }}
+        columnBreakpoints={{ 640: 2, 1024: 3 }}
         height="100%"
         class="flex-1 min-h-0"
         onScrollEnd={() => !isLoading && hasMore && load()}
         getKey={(w) => w.id}
       >
         {#snippet children({ item: word })}
-          <div class="flex items-baseline gap-4 h-full py-1 border-b border-terminal-border-light hover:bg-terminal-bg-secondary">
-            <span class="text-terminal-text-primary min-w-[10ch]">{word.word}</span>
-            {@render ipa(word, 'us')}
-            {@render ipa(word, 'uk')}
+          <div class="flex items-center gap-2 h-full px-2 border-b border-terminal-border-light hover:bg-terminal-bg-secondary touch-manipulation">
+            <span class="text-terminal-text-primary min-w-[8ch] truncate font-medium">{word.word}</span>
+            <div class="flex-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              {@render ipa(word, 'us')}
+              {@render ipa(word, 'uk')}
+            </div>
           </div>
         {/snippet}
       </VirtualList>
-      {#if isLoading}<p class="text-terminal-text-muted py-4 text-center">...</p>{/if}
-      {#if !hasMore}<p class="text-terminal-text-muted py-4 text-center">-- EOF --</p>{/if}
+      {#if isLoading}<p class="text-terminal-text-muted py-4 text-center text-sm">...</p>{/if}
+      {#if !hasMore}<p class="text-terminal-text-muted py-4 text-center text-sm">-- EOF --</p>{/if}
     {/if}
   </main>
 </div>
 
 <style>
+  /* 安全区域支持 */
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top, 20px);
+  }
+  
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+  }
+
+  /* 移动端优化 */
+  @media (max-width: 639px) {
+    :global(body) {
+      overflow-x: hidden;
+    }
+  }
+
   main :global(.virtual-list-container) {
     scrollbar-width: none;
     -ms-overflow-style: none;
