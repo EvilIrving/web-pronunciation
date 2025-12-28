@@ -192,10 +192,10 @@
                 {@const active = isPlaying(word, 'us')}
                 {#if hasAudio}
                   <button onclick={() => play(word, 'us')} class="bg-transparent border-none p-0 font-inherit cursor-pointer text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] {active ? 'text-[var(--color-accent-active)]' : ''}">
-                    <span class="text-[9px] text-[var(--color-text-muted)] mr-1">US</span>{ipaText ? `/${ipaText}/` : '🔊'}{active}<span class="ml-1">{active ? '▮▮' : ''}</span>
+                    <span class="text-[9px] text-[var(--color-text-muted)] mr-1">US</span>{ipaText ? `/${ipaText}/` : '▶'}<span class="ml-1">{active ? '▮▮' : ''}</span>
                   </button>
                 {:else}
-                  <span class="text-[var(--color-disabled)] cursor-default"><span class="text-[9px] text-[var(--color-text-muted)] mr-1">US</span>/{ipaText}/</span>
+                  <span class="text-[var(--color-disabled)] cursor-default"><span class="text-[9px] text-[var(--color-text-muted)] mr-1">US</span>{ipaText ? `/${ipaText}/` : ''}</span>
                 {/if}
               {/if}
               {#if word.audio_url_uk || word.ipa_uk}
@@ -204,10 +204,10 @@
                 {@const active = isPlaying(word, 'uk')}
                 {#if hasAudio}
                   <button onclick={() => play(word, 'uk')} class="bg-transparent border-none p-0 font-inherit cursor-pointer text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] {active ? 'text-[var(--color-accent-active)]' : ''}">
-                    <span class="text-[9px] text-[var(--color-text-muted)] mr-1">UK</span>{ipaText ? `/${ipaText}/` : '🔊'}{active}<span class="ml-1">{active ? '▮▮' : ''}</span>
+                    <span class="text-[9px] text-[var(--color-text-muted)] mr-1">UK</span>{ipaText ? `/${ipaText}/` : '▶'}<span class="ml-1">{active ? '▮▮' : ''}</span>
                   </button>
                 {:else}
-                  <span class="text-[var(--color-disabled)] cursor-default"><span class="text-[9px] text-[var(--color-text-muted)] mr-1">UK</span>/{ipaText}/</span>
+                  <span class="text-[var(--color-disabled)] cursor-default"><span class="text-[9px] text-[var(--color-text-muted)] mr-1">UK</span>{ipaText ? `/${ipaText}/` : ''}</span>
                 {/if}
               {/if}
               {#if word.audio_url || word.ipa}
@@ -216,10 +216,10 @@
                 {@const active = isPlaying(word, 'common')}
                 {#if hasAudio}
                   <button onclick={() => play(word, 'common')} class="bg-transparent border-none p-0 font-inherit cursor-pointer text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] {active ? 'text-[var(--color-accent-active)]' : ''}">
-                    <span class="text-[9px] text-[var(--color-text-muted)] mr-1">EN</span>{ipaText ? `/${ipaText}/` : '🔊'}{active}<span class="ml-1">{active ? '▮▮' : ''}</span>
+                    <span class="text-[9px] text-[var(--color-text-muted)] mr-1">EN</span>{ipaText ? `/${ipaText}/` : '▶'}<span class="ml-1">{active ? '▮▮' : ''}</span>
                   </button>
                 {:else}
-                  <span class="text-[var(--color-disabled)] cursor-default"><span class="text-[9px] text-[var(--color-text-muted)] mr-1">EN</span>/{ipaText}/</span>
+                  <span class="text-[var(--color-disabled)] cursor-default"><span class="text-[9px] text-[var(--color-text-muted)] mr-1">EN</span>{ipaText ? `/${ipaText}/` : ''}</span>
                 {/if}
               {/if}
             </div>

@@ -171,6 +171,23 @@ body {
   color: var(--color-text-muted);
 }
 
+/* Terminal Input */
+.input-terminal {
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: all var(--transition);
+}
+
+.input-terminal:focus {
+  border-color: var(--color-accent);
+}
+
+.input-terminal::placeholder {
+  color: var(--color-text-muted);
+}
+
 /* Claude Input */
 .input-claude {
   background-color: var(--color-bg-secondary);

@@ -14,7 +14,7 @@ export interface YoudaoResult {
 }
 
 function sign(word: string): string {
-  return '6b7cc97822fa580d061129c050f49de8';
+  return import.meta.env.YOUDAO_SIGN_KEY;
 }
 
 export async function getPhonetics(word: string): Promise<YoudaoResult> {
@@ -37,8 +37,10 @@ export async function getPhonetics(word: string): Promise<YoudaoResult> {
       throw new Error(`youdao: ${res.status}`);
     }
 
+    
     const data = await res.json();
     const w = data?.simple?.word?.[0];
+    console.log(data?.simple?.word,'youdao word');
 
     console.log('[Youdao] 返回数据:', JSON.stringify(w, null, 2));
 
@@ -55,9 +57,9 @@ export async function getPhonetics(word: string): Promise<YoudaoResult> {
       ipa_us: hasUsIpa ? w.usphone : null,
       ipa_uk: hasUkIpa ? w.ukphone : null,
       ipa: hasCommonIpa ? w.phone : null,
-      audio_url_us: hasUsSpeech ? `${VOICE}?${w.usspeech}&type=2` : null,
-      audio_url_uk: hasUkSpeech ? `${VOICE}?${w.ukspeech}&type=1` : null,
-      audio_url: hasCommonSpeech ? `${VOICE}?${w.speech}&type=2` : null
+      audio_url_us: hasUsSpeech ? `${VOICE}?audio=${w.usspeech}` : null,
+      audio_url_uk: hasUkSpeech ? `${VOICE}?audio=${w.ukspeech}` : null,
+      audio_url: hasCommonSpeech ? `${VOICE}?audio=${w.speech}` : null
     };
 
     console.log(`[Youdao] 解析结果:`, {
