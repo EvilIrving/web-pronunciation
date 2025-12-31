@@ -16,6 +16,8 @@
   - **Refactor** (2025-12-27) - 字段命名统一：将 `ipa` 改为 `ipa_us`，`audio_url` 改为 `audio_url_us`，与英音字段 `ipa_uk`/`audio_url_uk` 保持一致的命名规范
 
 ## phase-backend-fix-20251226 (2025-12-26)
+- `change_003` - API 路由权限检查 ([链接](../phases/phase-backend-fix-20251226/change_003.md))
+  - **Security** (2025-12-31) - API 路由添加 session 检查和 admin 权限验证：修复"前端做鉴权，后端裸奔"问题，所有管理 API（/api/words、/api/upload-audio、/api/tts）现在要求有效的 session，未登录返回 401，非 admin 返回 403
 - `change_002` - 有道音频接口参数文档补充 ([链接](../phases/phase-backend-fix-20251226/change_002.md))
   - **Docs** (2025-12-31) - 有道音频接口参数文档补充：新增「2. 有道词典真人发音 API」章节，记录完整接口参数和签名机制
 - `change_001` - 修复后台添加单词权限问题、后台交互优化、音频改用真人发音、编辑时支持生成音频 ([链接](../phases/phase-backend-fix-20251226/change_001.md))

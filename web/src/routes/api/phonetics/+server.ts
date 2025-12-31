@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { getPhonetics as youdao } from '$lib/youdao/client';
-import { getPhonetics as eudic } from '$lib/eudic/parser';
+import { lookup } from '$lib/server/dictionary';
 import type { RequestHandler } from './$types';
 import type { IpaSource } from '$lib/types';
 
@@ -22,8 +21,6 @@ export const GET: RequestHandler = async ({ url }) => {
   if (!word) return json({ error: 'word required' }, { status: 400 });
 
   try {
-    let result;
-    let ipa_source: IpaSource = null;
     let usedProvider: Provider = provider;
 
     // auto 模式：轮询切换 provider
@@ -37,17 +34,20 @@ export const GET: RequestHandler = async ({ url }) => {
       console.log(`[Phonetics/auto] 使用 ${usedProvider} 查询 "${word}"`);
     }
 
-    if (usedProvider === 'eudic') {
-      result = await eudic(word);
-    } else {
-      result = await youdao(word);
-    }
+    const result = await lookup(word, usedProvider);
 
-    if (result.ipa_us || result.ipa_uk) {
-      ipa_source = 'dict';
-    }
-
-    return json({ success: true, ...result, provider: usedProvider, ipa_source });
+    return json({
+      success: true,
+      word: result.word,
+      ipa_us: result.ipa_us,
+      ipa_uk: result.ipa_uk,
+      ipa: result.ipa,
+      audio_url_us: result.audio_url_us,
+      audio_url_uk: result.audio_url_uk,
+      audio_url: result.audio_url,
+      provider: result.provider,
+      ipa_source: result.ipa_source
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[Phonetics/${provider}]`, e);

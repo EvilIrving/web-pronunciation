@@ -6,6 +6,8 @@ declare global {
 		interface Locals {
 			supabase: ReturnType<typeof import('@supabase/ssr').createServerClient>
 			getSession: () => Promise<import('@supabase/supabase-js').Session | null>
+			user: import('@supabase/supabase-js').User | null
+			isAdmin: boolean
 		}
 		// interface PageData {}
 		// interface PageState {}

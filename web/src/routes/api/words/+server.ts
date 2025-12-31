@@ -4,6 +4,7 @@ import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import type { RequestHandler } from './$types';
 import type { IpaSource } from '$lib/types';
+import { requireAdmin } from '$lib/server/auth';
 
 const supabase = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -37,7 +38,10 @@ export const GET: RequestHandler = async ({ url }) => {
   }
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
+  const auth = requireAdmin(locals);
+  if (auth instanceof Response) return auth;
+
   try {
     const body: WordInsert = await request.json();
     if (!body.word) return json({ error: 'word required' }, { status: 400 });
@@ -50,7 +54,10 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 };
 
-export const PUT: RequestHandler = async ({ request }) => {
+export const PUT: RequestHandler = async ({ request, locals }) => {
+  const auth = requireAdmin(locals);
+  if (auth instanceof Response) return auth;
+
   try {
     const body: { id: string } & WordUpdate = await request.json();
     if (!body.id) return json({ error: 'id required' }, { status: 400 });
@@ -64,7 +71,10 @@ export const PUT: RequestHandler = async ({ request }) => {
   }
 };
 
-export const DELETE: RequestHandler = async ({ url }) => {
+export const DELETE: RequestHandler = async ({ url, locals }) => {
+  const auth = requireAdmin(locals);
+  if (auth instanceof Response) return auth;
+
   try {
     const id = url.searchParams.get('id');
     if (!id) return json({ error: 'id required' }, { status: 400 });

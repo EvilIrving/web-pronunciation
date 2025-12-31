@@ -20,7 +20,6 @@
   let input = $state('');
   let adding = $state(false);
   let refreshing = $state<string | null>(null);
-  let batchRefresh = $state({ loading: false, progress: null as { cur: number; total: number; word: string } | null, result: null as { ok: number; failed: string[] } | null });
 
   let batch = $state({ show: false, text: '', loading: false, progress: null as { cur: number; total: number; word: string } | null, result: null as { ok: number; failed: string[] } | null });
   let upload = $state({ show: false, mode: 'url' as 'url' | 'file', url: '', word: null as Word | null, err: '' });
@@ -127,35 +126,6 @@
   async function rm(w: Word) {
     words = words.filter(x => x.id !== w.id); toast.show(`rm "${w.word}"`, 'success');
     api.deleteWord(w.id).catch(() => { words = [...words, w]; toast.show('rm failed', 'error'); });
-  }
-
-  async function refreshAll() {
-    if (!filtered.length) return;
-    batchRefresh.loading = true; batchRefresh.result = null;
-    let ok = 0; const failed: string[] = [];
-    for (let i = 0; i < filtered.length; i++) {
-      const w = filtered[i];
-      batchRefresh.progress = { cur: i + 1, total: filtered.length, word: w.word };
-      try {
-        const ipa = await api.fetchPhonetics(w.word, 'auto').catch(() => ({ ipa_us: '', ipa_uk: '', ipa: '', ipa_source: null as import('$lib/types').IpaSource, audio_url_us: '', audio_url_uk: '', audio_url: '' }));
-        const tts = await api.fetchTTS(w.word, 'both', 'us', { ipa_us: ipa.ipa_us, ipa_uk: ipa.ipa_uk, ipa: ipa.ipa, audio_url_us: ipa.audio_url_us, audio_url_uk: ipa.audio_url_uk, audio_url: ipa.audio_url }).catch(() => ({ audio_url_us: '', audio_url_uk: '', audio_url: '' }));
-        const res = await api.updateWord({
-          id: w.id,
-          ipa_us: ipa.ipa_us,
-          ipa_uk: ipa.ipa_uk,
-          ipa: ipa.ipa,
-          audio_url_us: tts.audio_url_us,
-          audio_url_uk: tts.audio_url_uk,
-          audio_url: tts.audio_url,
-          ipa_source: ipa.ipa_source
-        });
-        if (res.error) { failed.push(`${w.word}: ${res.error}`); }
-        else { ok++; words = words.map(x => x.id === w.id ? { ...x, ...res.data } : x); }
-      } catch (e) { failed.push(`${w.word}: ${e instanceof Error ? e.message : 'err'}`); }
-    }
-    batchRefresh.result = { ok, failed }; batchRefresh.loading = false; batchRefresh.progress = null;
-    if (ok) toast.show(`updated ${ok}`, 'success');
-    if (failed.length) toast.show(`failed ${failed.length}`, 'error');
   }
 
   function play(w: Word, acc: Accent) {
@@ -288,21 +258,9 @@
         <div class="flex flex-wrap items-center gap-2 sm:gap-4">
           <span class="text-sm text-terminal-text-secondary hidden sm:inline">{authState.user?.email || 'user'}</span>
           {@render btn('logout', () => { signOut(); goto('/'); })}
-          {@render btn('全量更新', refreshAll, batchRefresh.loading, batchRefresh.loading)}
           {@render btn('batch', () => batch.show = true)}
         </div>
       </div>
-      {#if batchRefresh.progress}
-        <div class="border-t border-terminal-border px-4 py-2 bg-terminal-bg-secondary">
-          <div class="flex justify-between text-sm"><span>{batchRefresh.progress.word}</span><span>{batchRefresh.progress.cur}/{batchRefresh.progress.total}</span></div>
-          <div class="mt-1 h-1 bg-terminal-bg"><div class="h-full bg-terminal-accent" style="width: {(batchRefresh.progress.cur / batchRefresh.progress.total) * 100}%"></div></div>
-        </div>
-      {/if}
-      {#if batchRefresh.result}
-        <div class="border-t border-terminal-border px-4 py-2 text-sm {batchRefresh.result.failed.length ? 'text-terminal-warning' : 'text-terminal-accent'}">
-          updated {batchRefresh.result.ok}{#if batchRefresh.result.failed.length}, {batchRefresh.result.failed.length} failed{/if}
-        </div>
-      {/if}
     </header>
 
     <main class="mx-auto max-w-5xl px-4 py-4">

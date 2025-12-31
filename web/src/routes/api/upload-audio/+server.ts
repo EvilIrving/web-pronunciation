@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
-import { upload, genFilename, AUDIO_TYPES, MAX_SIZE, getExt } from '$lib/r2';
+import { upload, genFilename, AUDIO_TYPES, MAX_SIZE, getExt } from '$lib/server/r2';
 import type { RequestHandler } from './$types';
+import { requireAdmin } from '$lib/server/auth';
 
 async function fetchUrl(url: string): Promise<{ data: Uint8Array; type: string }> {
   const res = await fetch(url, {
@@ -14,7 +15,10 @@ async function fetchUrl(url: string): Promise<{ data: Uint8Array; type: string }
   return { data: new Uint8Array(buf), type };
 }
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
+  const auth = requireAdmin(locals);
+  if (auth instanceof Response) return auth;
+
   try {
     const ct = request.headers.get('content-type') || '';
 

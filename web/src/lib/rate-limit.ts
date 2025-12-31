@@ -17,8 +17,7 @@ interface RateLimitConfig {
 // 各 provider 的限制配置
 const CONFIGS: Record<string, RateLimitConfig> = {
   youdao: { maxRequests: 5, windowMs: 60 * 1000 },      // 有道：每分钟 5 次
-  eudic: { maxRequests: 5, windowMs: 60 * 1000 },       // 欧陆：每分钟 5 次
-  frdic: { maxRequests: 10, windowMs: 60 * 1000 },      // frdic：每分钟 10 次（相对宽松）
+  eudic: { maxRequests: 5, windowMs: 60 * 1000 },       // 欧路（frdic）：每分钟 5 次
 };
 
 // 存储各 provider 的请求时间戳（使用 global 避免服务端热重载重置）
