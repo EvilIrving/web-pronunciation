@@ -52,23 +52,36 @@ export async function getPhonetics(word: string): Promise<YoudaoResult> {
     const hasUsSpeech = !!w?.usspeech;
     const hasUkSpeech = !!w?.ukspeech;
 
+    // 检查是否有专用的美音/英音音频
+    const hasDedicatedUsAudio = hasUsSpeech;
+    const hasDedicatedUkAudio = hasUkSpeech;
+    
+    // 如果没有专用音频但有通用音频，使用通用音频
+    const useCommonAudio = hasCommonSpeech && !hasUsSpeech && !hasUkSpeech;
+
+    // 构建音频 URL
+    // 优先使用专用音频，如果没有则使用通用音频（type=2 美音作为默认）
+    const audioUrl = hasUsSpeech ? w.usspeech : (hasCommonSpeech ? w.speech : null);
+    const audioUrlUk = hasUkSpeech ? w.ukspeech : (useCommonAudio ? w.speech : null);
+
+    // 如果只有通用音频，只设置 audio_url，不设置 audio_url_us/audio_url_uk（避免重复）
     const result: YoudaoResult = {
       word: word.toLowerCase(),
       ipa_us: hasUsIpa ? w.usphone : null,
       ipa_uk: hasUkIpa ? w.ukphone : null,
       ipa: hasCommonIpa ? w.phone : null,
-      audio_url_us: hasUsSpeech ? `${VOICE}?audio=${w.usspeech}` : null,
-      audio_url_uk: hasUkSpeech ? `${VOICE}?audio=${w.ukspeech}` : null,
-      audio_url: hasCommonSpeech ? `${VOICE}?audio=${w.speech}` : null
+      audio_url_us: hasDedicatedUsAudio ? `${VOICE}?audio=${encodeURIComponent(w.usspeech)}&type=2` : null,
+      audio_url_uk: hasDedicatedUkAudio ? `${VOICE}?audio=${encodeURIComponent(w.ukspeech)}&type=1` : null,
+      audio_url: useCommonAudio ? `${VOICE}?audio=${encodeURIComponent(w.speech)}&type=2` : (hasDedicatedUsAudio ? `${VOICE}?audio=${encodeURIComponent(w.usspeech)}&type=2` : null)
     };
 
     console.log(`[Youdao] 解析结果:`, {
       ipa_us: result.ipa_us,
       ipa_uk: result.ipa_uk,
       ipa: result.ipa,
-      audio_url_us: result.audio_url_us ? '有' : '无',
-      audio_url_uk: result.audio_url_uk ? '有' : '无',
-      audio_url: result.audio_url ? '有' : '无'
+      audio_url_us: result.audio_url_us,
+      audio_url_uk: result.audio_url_uk,
+      audio_url: result.audio_url
     });
 
     return result;

@@ -1,8 +1,220 @@
 # 语音合成 API 文档
 
-本文档包含两个语音合成服务：
+本文档包含三个语音合成服务：
 1. **Eudic (frdic.com)** - 真人发音，支持美音和英音
-2. **MiniMax T2A** - AI 生成发音
+2. **有道词典 (dict.youdao.com)** - 真人发音，支持美音和英音
+3. **MiniMax T2A** - AI 生成发音
+
+---
+
+## 1. Eudic 真人发音 API
+
+### API 端点
+
+```
+POST /api/tts
+```
+
+### 请求参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| word | string | 是 | - | 要生成音频的单词 |
+| mode | string | 否 | `single` | 模式：`single`（单一口音）或 `both`（同时生成美音和英音） |
+| accent | string | 否 | `us` | 口音：`us`（美音）或 `uk`（英音），仅 mode 为 `single` 时有效 |
+| provider | string | 否 | `frdic` | 发音源：`frdic`（真人）或 `minimax`（AI） |
+
+### voicename 说明
+
+Eudic API 的 `voicename` 参数主要用于区分口音，而非性别：
+
+| voicename | 口音 | 说明 |
+|-----------|------|------|
+| `en_us_female` | 美音 | US English Female |
+| `en_uk_male` | 英音 | UK English Male |
+
+### 请求示例
+
+```bash
+# 美音（默认，单一模式）
+curl -X POST http://localhost:5173/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"word": "hello", "accent": "us"}'
+
+# 英音
+curl -X POST http://localhost:5173/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"word": "hello", "accent": "uk"}'
+
+# 同时生成美音和英音（推荐）
+curl -X POST http://localhost:5173/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"word": "hello", "mode": "both"}'
+
+# 使用 MiniMax AI 发音
+curl -X POST http://localhost:5173/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"word": "hello", "provider": "minimax"}'
+```
+
+### 响应示例
+
+**单一模式** (`mode: "single"` 或默认):
+
+```json
+{
+  "success": true,
+  "audio_url": "https://bucket.onecat.dev/hello_us_1735313400000.mp3",
+  "audio_size": 12345,
+  "accent": "us",
+  "provider": "frdic",
+  "mode": "single"
+}
+```
+
+**双语音模式** (`mode: "both"`):
+
+```json
+{
+  "success": true,
+  "audio_url": "https://bucket.onecat.dev/hello_us_1735313400001.mp3",
+  "audio_url_uk": "https://bucket.onecat.dev/hello_uk_1735313400002.mp3",
+  "audio_size": 12345,
+  "audio_size_uk": 12367,
+  "provider": "frdic",
+  "mode": "both"
+}
+```
+
+### Eudic 直接调用
+
+```
+https://api.frdic.com/api/v2/speech/speakweb?langid=en&voicename=en_us_female&txt=QYNc2NoZW1l
+https://api.frdic.com/api/v2/speech/speakweb?langid=en&voicename=en_uk_male&txt=QYNc2NoZW1l
+```
+
+其中 `txt` 参数格式为：`QYN` + Base64编码的文本
+
+---
+
+## 2. 有道词典真人发音 API
+
+### API 端点
+
+```
+GET /jsonapi_s?doctype=json&jsonversion=4
+POST /jsonapi_s (带签名的表单)
+```
+
+### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| q | string | 是 | 要查询的单词 |
+| le | string | 否 | 语言类型，`en` 表示英语 |
+| t | integer | 否 | 类型，`3` 表示查询音标 |
+| client | string | 是 | 客户端标识，`web` |
+| sign | string | 是 | 签名字符串 |
+| keyfrom | string | 是 | 来源标识，`webdict` |
+
+### 有道音频直接获取
+
+```
+https://dict.youdao.com/dictvoice?audio={word}&type={type}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| audio | string | 是 | 要发音的单词 |
+| type | integer | 否 | 口音类型，`1`=英音，`2`=美音（默认） |
+
+### 有道音频接口参数（完整版）
+
+有道词典提供完整的音频接口，支持更多参数控制：
+
+```
+POST https://dict.youdao.com/jsonapi_s
+```
+
+**请求体参数**（表单格式 `application/x-www-form-urlencoded`）:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| product | string | 是 | 产品标识，如 `webdict` |
+| appVersion | string | 是 | 应用版本，如 `1` |
+| client | string | 是 | 客户端类型，如 `web` |
+| mid | string | 是 | 设备标识，如 `1` |
+| vendor | string | 是 | 厂商信息，如 `web` |
+| screen | string | 是 | 屏幕参数，如 `1` |
+| model | string | 是 | 设备型号，如 `1` |
+| imei | string | 是 | 设备标识，如 `1` |
+| network | string | 是 | 网络类型，如 `wifi` |
+| keyfrom | string | 是 | 来源标识，如 `dick` |
+| keyid | string | 是 | 接口标识，如 `voiceDictWeb` |
+| mysticTime | string | 是 | 时间戳（毫秒），如 `1767150783104` |
+| yduuid | string | 是 | 用户唯一标识，如 `abcdefg` |
+| le | string | 否 | 语言类型，`en` 表示英语 |
+| phonetic | string | 否 | 音标类型 |
+| rate | string | 否 | 语速，`4` 为标准速度 |
+| word | string | 是 | 要发音的单词，如 `XAML` |
+| type | integer | 否 | 发音类型，`1`=英音，`2`=美音（默认） |
+| id | string | 否 | 词条 ID |
+| sign | string | 是 | 签名字符串 |
+| pointParam | string | 是 | 参与签名的参数列表（逗号分隔） |
+
+**pointParam 参数列表**:
+
+```
+appVersion,client,imei,keyfrom,keyid,mid,model,mysticTime,network,product,rate,screen,type,vendor,word,yduuid,key
+```
+
+### 签名计算
+
+有道 API 使用 HMAC-SHA256 或类似算法对参数进行签名。签名需要：
+1. 将 `pointParam` 中列出的参数按顺序拼接
+2. 末尾添加 `key`（API 密钥）
+3. 对拼接后的字符串进行哈希运算
+
+### 有道音频实现示例
+
+```typescript
+// web/src/lib/youdao/client.ts
+
+const VOICE = 'https://dict.youdao.com/dictvoice';
+
+export async function fetchAudio(word: string, accent: 'us' | 'uk' = 'us'): Promise<Uint8Array> {
+  const type = accent === 'uk' ? 1 : 2;
+  const url = `${VOICE}?audio=${encodeURIComponent(word)}&type=${type}`;
+  
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' }
+  });
+  
+  if (!res.ok) {
+    throw new Error(`youdao audio: ${res.status}`);
+  }
+  
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength === 0) {
+    throw new Error('empty audio');
+  }
+  
+  return new Uint8Array(buf);
+}
+```
+
+### 有道发音特点
+
+- **发音质量**：真人发音，质量较高
+- **口音**：
+  - 美音 (`type=2`): 标准美式发音
+  - 英音 (`type=1`): 标准英式发音
+- **稳定性**：有道词典发音相对稳定，但接口可能随时调整
+- **签名要求**：完整 API 需要签名，简单音频获取接口 (`dictvoice`) 不需要签名
+
+---
+
+## 3. MiniMax TTS API
 
 ---
 

@@ -33,8 +33,11 @@ export const POST: RequestHandler = async ({ request }) => {
 
     const dictProvider: DictProvider = provider === 'eudic' ? 'eudic' : 'youdao';
 
-    // 如果已有 phonetics 信息则复用，否则查询
-    const hasExisting = existingPhonetics && Object.values(existingPhonetics).some(v => !!v);
+    // 如果已有 phonetics 信息且包含有效字段（IPA 或 audio_url），则复用，否则查询 API
+    const hasExisting = existingPhonetics && (
+      !!(existingPhonetics.ipa_us || existingPhonetics.ipa_uk || existingPhonetics.ipa) ||
+      !!(existingPhonetics.audio_url_us || existingPhonetics.audio_url_uk || existingPhonetics.audio_url)
+    );
     const phonetics = hasExisting ? existingPhonetics : await getPhonetics(word, dictProvider);
 
     const result: Record<string, unknown> = {
@@ -45,15 +48,15 @@ export const POST: RequestHandler = async ({ request }) => {
 
     const tasks: Array<() => Promise<{ url: string; size: number; accent: string }>> = [];
 
-    const hasIpa = (existingPhonetics?.ipa_us || existingPhonetics?.ipa_uk || existingPhonetics?.ipa);
+    const hasIpa = !!(existingPhonetics?.ipa_us || existingPhonetics?.ipa_uk || existingPhonetics?.ipa);
     const hasValidPhonetics = hasIpa ? (
-      phonetics.audio_url_us && phonetics.audio_url_us !== '无' ||
-      phonetics.audio_url_uk && phonetics.audio_url_uk !== '无' ||
-      phonetics.audio_url && phonetics.audio_url !== '无'
+      !!phonetics.audio_url_us ||
+      !!phonetics.audio_url_uk ||
+      !!phonetics.audio_url
     ) : (
-      phonetics.audio_url_us && phonetics.audio_url_us !== '无' ||
-      phonetics.audio_url_uk && phonetics.audio_url_uk !== '无' ||
-      phonetics.audio_url && phonetics.audio_url !== '无'
+      !!phonetics.audio_url_us ||
+      !!phonetics.audio_url_uk ||
+      !!phonetics.audio_url
     );
 
     if (!hasValidPhonetics) {
@@ -66,17 +69,17 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     // US 音频
-    if (phonetics.audio_url_us && phonetics.audio_url_us !== '无') {
+    if (phonetics.audio_url_us) {
       tasks.push(() => downloadAudio(phonetics.audio_url_us!, word, 'us'));
     }
 
     // UK 音频
-    if (phonetics.audio_url_uk && phonetics.audio_url_uk !== '无') {
+    if (phonetics.audio_url_uk) {
       tasks.push(() => downloadAudio(phonetics.audio_url_uk!, word, 'uk'));
     }
 
     // 通用音频
-    if (phonetics.audio_url && phonetics.audio_url !== '无') {
+    if (phonetics.audio_url) {
       tasks.push(() => downloadAudio(phonetics.audio_url!, word, 'common'));
     }
 
